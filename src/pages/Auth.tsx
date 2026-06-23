@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -12,39 +12,18 @@ const Auth = () => {
   const [form, setForm] = useState({ email: "", password: "", name: "", phone: "" });
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { signIn, signUp } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: form.email,
-          password: form.password,
-        });
-        if (error) throw error;
+        await signIn(form.email, form.password);
         toast({ title: "登入成功！" });
         navigate("/");
       } else {
-        const { error } = await supabase.auth.signUp({
-          email: form.email,
-          password: form.password,
-          options: {
-            data: { display_name: form.name, phone: form.phone },
-            emailRedirectTo: window.location.origin,
-          },
-        });
-        if (error) throw error;
-
-        supabase.functions.invoke("send-transactional-email", {
-          body: {
-            templateName: "welcome-member",
-            recipientEmail: form.email,
-            idempotencyKey: `welcome-${form.email}`,
-            templateData: { name: form.name },
-          },
-        }).catch((err) => console.error("Welcome email failed", err));
-
+        await signUp(form.email, form.password, form.name, form.phone);
         toast({
           title: "註冊成功！",
           description: "請前往信箱點擊驗證連結以完成註冊。",

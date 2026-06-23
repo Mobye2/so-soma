@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
+import {
+  CognitoUserPool,
+  CognitoUser,
+  AuthenticationDetails,
+  CognitoUserAttribute,
+} from "amazon-cognito-identity-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
+
+const poolData = {
+  UserPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+  ClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+};
+
+export const userPool = new CognitoUserPool(poolData);
 
 interface Profile {
   display_name: string | null;
@@ -8,47 +20,95 @@ interface Profile {
   email: string | null;
 }
 
+interface AuthUser {
+  email: string;
+  sub: string;
+}
+
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
+    const cognitoUser = userPool.getCurrentUser();
+    if (!cognitoUser) {
+      setLoading(false);
+      return;
+    }
 
-        if (currentUser) {
-          // Fetch profile with setTimeout to avoid deadlock
-          setTimeout(async () => {
-            const { data } = await supabase
-              .from("profiles")
-              .select("display_name, phone, email")
-              .eq("id", currentUser.id)
-              .single();
-            setProfile(data);
-            setLoading(false);
-          }, 0);
-        } else {
-          setProfile(null);
-          setLoading(false);
-        }
+    cognitoUser.getSession(async (err: Error | null, session: any) => {
+      if (err || !session?.isValid()) {
+        setLoading(false);
+        return;
       }
-    );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
+      const payload = session.getIdToken().decodePayload();
+      const currentUser = { email: payload.email, sub: payload.sub };
       setUser(currentUser);
-      if (!currentUser) setLoading(false);
-    });
 
-    return () => subscription.unsubscribe();
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name, phone, email")
+        .eq("id", currentUser.sub)
+        .single();
+      setProfile(data);
+      setLoading(false);
+    });
   }, []);
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
+  const signIn = (email: string, password: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      const authDetails = new AuthenticationDetails({ Username: email, Password: password });
+
+      cognitoUser.authenticateUser(authDetails, {
+        onSuccess: async (session) => {
+          const payload = session.getIdToken().decodePayload();
+          const currentUser = { email: payload.email, sub: payload.sub };
+          setUser(currentUser);
+
+          const { data } = await supabase
+            .from("profiles")
+            .select("display_name, phone, email")
+            .eq("id", currentUser.sub)
+            .single();
+          setProfile(data);
+          resolve();
+        },
+        onFailure: (err) => reject(err),
+      });
+    });
   };
 
-  return { user, profile, loading, signOut };
+  const signUp = (email: string, password: string, name: string, phone: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const attributes = [
+        new CognitoUserAttribute({ Name: "email", Value: email }),
+      ];
+
+      userPool.signUp(email, password, attributes, [], async (err, result) => {
+        if (err) return reject(err);
+
+        const sub = result!.userSub;
+        await supabase.from("profiles").insert({
+          id: sub,
+          email,
+          display_name: name || null,
+          phone: phone || null,
+        });
+
+        resolve();
+      });
+    });
+  };
+
+  const signOut = () => {
+    const cognitoUser = userPool.getCurrentUser();
+    cognitoUser?.signOut();
+    setUser(null);
+    setProfile(null);
+  };
+
+  return { user, profile, loading, signIn, signUp, signOut };
 };

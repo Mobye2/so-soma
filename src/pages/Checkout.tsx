@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Trash2, CreditCard, Loader2, User, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { trackBeginCheckout } from "@/lib/analytics";
+import { apiPost } from "@/lib/api";
 
 const Checkout = () => {
   const { items, totalAmount, clearCart, removeItem } = useCart();
@@ -38,25 +39,20 @@ const Checkout = () => {
     setLoading(true);
     try {
       // Create order + items server-side (validated, prices re-checked)
-      const { data: createData, error: createError } = await supabase.functions.invoke(
-        "create-order",
-        {
-          body: {
-            customer_name: form.name,
-            customer_email: form.email,
-            customer_phone: form.phone || null,
-            notes: form.notes || null,
-            items: items.map((i) => ({
-              id: i.id,
-              title: i.title,
-              quantity: i.quantity,
-              price: i.price,
-              category: i.category,
-            })),
-          },
-        }
-      );
-      if (createError) throw createError;
+      const token = user?.signInUserSession?.idToken?.jwtToken;
+      const createData = await apiPost("/orders", {
+        customer_name: form.name,
+        customer_email: form.email,
+        customer_phone: form.phone || null,
+        notes: form.notes || null,
+        items: items.map((i) => ({
+          id: i.id,
+          title: i.title,
+          quantity: i.quantity,
+          price: i.price,
+          category: i.category,
+        })),
+      }, token);
       const orderId = createData.orderId as string;
 
       // Update profile if logged in
@@ -67,13 +63,8 @@ const Checkout = () => {
         }).eq("id", user.id);
       }
 
-      // Call ECPay edge function
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
-        "ecpay-create-payment",
-        { body: { orderId } }
-      );
-
-      if (paymentError) throw paymentError;
+      // Call ECPay payment function
+      const paymentData = await apiPost("/ecpay-create-payment", { orderId }, token);
 
       const { paymentUrl, params } = paymentData;
       const formEl = document.createElement("form");

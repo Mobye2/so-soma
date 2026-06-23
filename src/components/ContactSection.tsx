@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { trackContactSubmit } from "@/lib/analytics";
+import { apiPost } from "@/lib/api";
 
 interface ContactSectionProps {
   showHeading?: boolean;
@@ -51,13 +52,11 @@ const ContactSection = ({ showHeading = true }: ContactSectionProps) => {
         });
       }
 
-      supabase.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: "contact-confirmation",
-          recipientEmail: form.email,
-          idempotencyKey: `contact-confirm-${id}`,
-          templateData: { name: form.name, subject: form.subject },
-        },
+      apiPost("/send-email", {
+        templateName: "contact-confirmation",
+        recipientEmail: form.email,
+        idempotencyKey: `contact-confirm-${id}`,
+        templateData: { name: form.name, subject: form.subject },
       }).catch((err) => console.error("Email send failed", err));
 
       trackContactSubmit(form.subject);

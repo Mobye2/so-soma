@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiPost } from "@/lib/api";
 import type { User } from "@supabase/supabase-js";
 interface OrderItem {
   product_title: string;
@@ -35,11 +36,7 @@ const OrdersTab = ({ user }: { user: User }) => {
   const handlePayNow = async (orderId: string) => {
     setPayingOrderId(orderId);
     try {
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
-        "ecpay-create-payment",
-        { body: { orderId } }
-      );
-      if (paymentError) throw paymentError;
+      const paymentData = await apiPost("/ecpay-create-payment", { orderId });
 
       const { paymentUrl, params } = paymentData;
       const formEl = document.createElement("form");

@@ -1,0 +1,1 @@
+DELETE FROM public.courses WHERE slug = 'forest-healing-urban';

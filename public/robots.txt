@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /member
+Disallow: /checkout
+Disallow: /order-success
+Disallow: /auth
+
+Sitemap: https://www.solisforest.com/sitemap.xml

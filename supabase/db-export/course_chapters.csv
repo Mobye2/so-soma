@@ -1,0 +1,4 @@
+id,course_id,title,description,video_url,duration_minutes,sort_order,is_preview,created_at,updated_at
+b1011e75-f6bf-49a7-9cf5-305fa1eb483c,1339b4f7-c282-4939-9af9-b59bca5435fb,第一章：認識自律神經,本章節介紹自律神經系統的基本結構，以及交感／副交感的日常表現。免費試看。,https://www.youtube.com/watch?v=jNQXAC9IVRw,5,1,t,2026-06-19 07:10:30.22776+00,2026-06-19 07:10:30.22776+00
+7edac711-4e7e-44be-b57c-0e1d5b6acd2f,1339b4f7-c282-4939-9af9-b59bca5435fb,第二章：身體訊號的觀察練習,透過呼吸與身體覺察，學習辨認神經系統當下的狀態，並進行簡單的調節練習。,https://www.youtube.com/watch?v=aqz-KE-bpKQ,12,2,f,2026-06-19 07:10:30.22776+00,2026-06-19 07:10:30.22776+00
+9a57c7fa-9713-4de4-a191-ef0642433aba,ee367ca3-194e-4bfd-892d-4f72ad2da830,新章節,,https://rtnnfykmbejsmcloovre.supabase.co/storage/v1/object/public/course-videos/ee367ca3-194e-4bfd-892d-4f72ad2da830/9a57c7fa-9713-4de4-a191-ef0642433aba-1781854538797.mov,,1,f,2026-06-19 07:34:47.610613+00,2026-06-19 07:37:36.936027+00

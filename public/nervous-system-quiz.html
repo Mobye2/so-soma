@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>神經系統身心狀態全景測驗</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --clr-teal: #1D9E75; --clr-teal-dark: #0F6E56; --clr-teal-deeper: #085041;
+      --clr-teal-bg: #E1F5EE; --clr-border: rgba(0,0,0,0.10); --clr-border-md: rgba(0,0,0,0.18);
+      --clr-text: #1a1a1a; --clr-text-sec: #555; --clr-text-hint: #888;
+      --clr-bg: #ffffff; --clr-surface: #f7f7f5;
+      --radius-sm: 8px; --radius-md: 12px;
+      --font: -apple-system,'Helvetica Neue',Arial,'PingFang TC','Microsoft JhengHei',sans-serif;
+    }
+    body { font-family: var(--font); color: var(--clr-text); background: transparent; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    .qc { max-width: 600px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    .prog-out { height: 3px; background: var(--clr-border); border-radius: 3px; margin-bottom: 2rem; }
+    .prog-in { height: 3px; background: var(--clr-teal); border-radius: 3px; transition: width .4s ease; }
+    .dim-lbl { font-size: 11px; letter-spacing: .07em; color: var(--clr-text-hint); margin-bottom: .4rem; }
+    .q-title { font-size: 18px; font-weight: 600; color: var(--clr-text); line-height: 1.45; margin-bottom: .35rem; }
+    .q-sub { font-size: 13px; color: var(--clr-text-sec); margin-bottom: 1.25rem; line-height: 1.6; }
+    .opt-btn { display: block; width: 100%; text-align: left; padding: 13px 16px; margin-bottom: 9px; background: var(--clr-bg); border: 1px solid var(--clr-border); border-radius: var(--radius-md); font-size: 14px; color: var(--clr-text); cursor: pointer; transition: border-color .15s, background .15s; line-height: 1.5; font-family: var(--font); }
+    .opt-btn:hover { border-color: var(--clr-teal); background: var(--clr-teal-bg); }
+    .opt-btn.selected { border: 1.5px solid var(--clr-teal); background: var(--clr-teal-bg); color: var(--clr-teal-deeper); }
+    .opt-ltr { display: block; font-size: 10px; font-weight: 600; color: var(--clr-text-hint); margin-bottom: 3px; }
+    .opt-btn.selected .opt-ltr { color: var(--clr-teal-dark); }
+    .freq-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 1rem; }
+    .freq-btn { padding: 11px 6px; background: var(--clr-bg); border: 1px solid var(--clr-border); border-radius: var(--radius-sm); font-size: 12px; color: var(--clr-text-sec); cursor: pointer; text-align: center; transition: border-color .15s, background .15s; line-height: 1.4; font-family: var(--font); }
+    .freq-btn:hover { border-color: var(--clr-teal); background: var(--clr-teal-bg); }
+    .freq-btn.selected { border: 1.5px solid var(--clr-teal); background: var(--clr-teal-bg); color: var(--clr-teal-deeper); font-weight: 600; }
+    .nav-row { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+    .btn-back { background: none; border: none; font-size: 13px; color: var(--clr-text-hint); cursor: pointer; padding: 0; font-family: var(--font); }
+    .btn-next { padding: 11px 24px; background: var(--clr-bg); border: 1px solid var(--clr-border-md); border-radius: var(--radius-sm); font-size: 14px; color: var(--clr-text); cursor: pointer; transition: background .15s; font-family: var(--font); }
+    .btn-next:hover { background: var(--clr-surface); }
+    .btn-next:disabled { opacity: .3; cursor: default; }
+    .btn-next.primary { background: var(--clr-teal); color: #fff; border-color: var(--clr-teal); }
+    .btn-next.primary:hover { background: var(--clr-teal-dark); }
+    .divider { height: 1px; background: var(--clr-border); margin: 1.5rem 0; }
+    .state-badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: .85rem; }
+    .result-title { font-size: 22px; font-weight: 700; line-height: 1.35; margin-bottom: .65rem; }
+    .result-desc { font-size: 14px; color: var(--clr-text-sec); line-height: 1.8; margin-bottom: 1.5rem; }
+    .radar-wrap { position: relative; width: 100%; max-width: 360px; height: 320px; margin: .5rem auto 1rem; }
+    .panorama-legend { background: var(--clr-surface); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 1rem; font-size: 12px; color: var(--clr-text-sec); line-height: 1.7; }
+    .panorama-legend b { color: var(--clr-text); font-weight: 600; }
+    .kaia-note { background: var(--clr-teal-bg); border-left: 3px solid var(--clr-teal); border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: 14px 16px; margin: 0 0 1.5rem; }
+    .kaia-note-hd { font-size: 11px; font-weight: 600; letter-spacing: .07em; color: var(--clr-teal-dark); margin-bottom: 6px; }
+    .kaia-note-body { font-size: 13px; color: var(--clr-text); line-height: 1.75; }
+    .sbar-section { margin-bottom: 1.5rem; }
+    .sbar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .sbar-lbl { font-size: 12px; color: var(--clr-text-sec); width: 72px; flex-shrink: 0; }
+    .sbar-track { flex: 1; height: 5px; background: var(--clr-border); border-radius: 5px; overflow: hidden; }
+    .sbar-fill { height: 5px; border-radius: 5px; transition: width .7s ease .1s; }
+    .sbar-pct { font-size: 11px; color: var(--clr-text-hint); width: 30px; text-align: right; }
+    .sec-lbl { font-size: 11px; font-weight: 600; letter-spacing: .07em; color: var(--clr-text-hint); margin-bottom: .85rem; }
+    .g-tip { background: var(--clr-surface); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 9px; }
+    .g-tip-title { font-size: 14px; font-weight: 600; color: var(--clr-text); margin-bottom: 5px; }
+    .g-tip-body { font-size: 13px; color: var(--clr-text-sec); line-height: 1.7; }
+    .dim-card { background: var(--clr-bg); border: 1px solid var(--clr-border); border-left-width: 3px; border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: 14px 16px; margin-bottom: 10px; }
+    .dim-card-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .dim-card-name { font-size: 14px; font-weight: 600; }
+    .dim-badge { font-size: 11px; padding: 2px 9px; border-radius: 10px; }
+    .score-track { height: 4px; background: var(--clr-border); border-radius: 4px; margin: 5px 0 10px; }
+    .score-fill { height: 4px; border-radius: 4px; }
+    .dim-insight { font-size: 13px; color: var(--clr-text-sec); line-height: 1.7; margin-bottom: 9px; }
+    .dim-tip-box { font-size: 12px; color: var(--clr-text-sec); line-height: 1.7; padding: 10px 12px; background: var(--clr-surface); border-radius: var(--radius-sm); }
+    .tip-micro { font-size: 10px; font-weight: 600; letter-spacing: .05em; color: var(--clr-text-hint); display: block; margin-bottom: 4px; }
+    .disclaimer { font-size: 11px; color: var(--clr-text-hint); line-height: 1.75; margin: 1rem 0 .85rem; }
+    .restart-btn { padding: 10px 24px; background: var(--clr-bg); border: 1px solid var(--clr-border-md); border-radius: var(--radius-sm); font-size: 13px; color: var(--clr-text-sec); cursor: pointer; font-family: var(--font); }
+    .restart-btn:hover { background: var(--clr-surface); }
+    /* === Infographic-style summary card (soft + playful) === */
+    .infocard { position: relative; background: #FBF7F0; border: 1px solid #D9CFBF; border-radius: 18px; padding: 20px 18px 18px; margin-bottom: 1.75rem; box-shadow: 3px 3px 0 #E8DFCC; overflow: hidden; }
+    .infocard-mascot { position: absolute; top: 8px; right: 8px; width: 86px; height: 86px; opacity: .95; pointer-events: none; }
+    .infocard-eyebrow { font-size: 11px; color: var(--clr-text-sec); margin-bottom: 6px; padding-right: 84px; }
+    .infocard-title { font-size: 30px; font-weight: 900; line-height: 1.15; color: var(--clr-text); margin-bottom: 10px; letter-spacing: .02em; padding-right: 84px; }
+    .infocard-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+    .infocard-tag { font-size: 11px; padding: 4px 10px; border-radius: 999px; font-weight: 600; border: 1px solid currentColor; background: #fff; }
+    .infocard-stat { font-size: 13px; color: var(--clr-text-sec); margin-bottom: 14px; line-height: 1.6; }
+    .infocard-stat b { font-size: 20px; font-weight: 800; color: var(--clr-teal-dark); margin: 0 2px; }
+    .ic-block { background: #fff; border: 1px solid #E8DFCC; border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
+    .ic-block-hd { background: #F0E9DA; color: #5C4A2E; font-size: 12px; font-weight: 700; padding: 8px 14px; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+    .ic-block-hd .ic-emoji { font-size: 14px; }
+    .ic-block-body { padding: 13px 15px; font-size: 13.5px; line-height: 1.75; color: var(--clr-text); }
+    .ic-block-body.quote { color: #4A6741; }
+    .ic-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .ic-stat { background: #fff; border: 1px solid #E8DFCC; border-radius: 14px; overflow: hidden; text-align: center; }
+    .ic-stat-hd { background: #F0E9DA; color: #5C4A2E; font-size: 11px; font-weight: 700; padding: 6px 4px; letter-spacing: .04em; }
+    .ic-stat-body { padding: 11px 6px; }
+    .ic-stat-main { font-size: 16px; font-weight: 800; line-height: 1.2; }
+    .ic-stat-sub { font-size: 10.5px; color: var(--clr-text-sec); margin-top: 4px; line-height: 1.4; }
+    .ic-action { background: #E1F5EE; border: 1px dashed #1D9E75; border-radius: 14px; padding: 13px 15px; display: flex; gap: 12px; align-items: flex-start; }
+    .ic-action-icon { font-size: 26px; line-height: 1; flex-shrink: 0; }
+    .ic-action-text { flex: 1; }
+    .ic-action-lbl { font-size: 11px; font-weight: 700; color: var(--clr-teal-dark); letter-spacing: .05em; margin-bottom: 4px; }
+    .ic-action-body { font-size: 13.5px; font-weight: 600; color: var(--clr-text); line-height: 1.55; }
+    /* Plant-character extras */
+    .ic-nutri { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+    .ic-nutri-cell { background: #fff; border: 1px solid #E8DFCC; border-radius: 12px; padding: 10px 11px; }
+    .ic-nutri-lbl { font-size: 10.5px; font-weight: 700; color: #5C4A2E; letter-spacing: .04em; margin-bottom: 5px; }
+    .ic-nutri-body { font-size: 12px; color: var(--clr-text); line-height: 1.6; }
+    .ic-pals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+    .ic-pal { background: #fff; border: 1px solid #E8DFCC; border-radius: 12px; padding: 10px 11px; display: flex; gap: 10px; align-items: center; }
+    .ic-pal img { width: 44px; height: 44px; flex-shrink: 0; object-fit: contain; }
+    .ic-pal-text { flex: 1; min-width: 0; }
+    .ic-pal-lbl { font-size: 10.5px; font-weight: 700; color: #5C4A2E; letter-spacing: .04em; margin-bottom: 3px; }
+    .ic-pal-name { font-size: 14px; font-weight: 800; color: var(--clr-text); margin-bottom: 2px; }
+    .ic-pal-reason { font-size: 11px; color: var(--clr-text-sec); line-height: 1.45; }
+    @media (max-width: 480px) {
+      .infocard-title { font-size: 24px; padding-right: 70px; }
+      .infocard-eyebrow { padding-right: 70px; }
+      .infocard-mascot { width: 70px; height: 70px; }
+      .ic-stat-main { font-size: 14px; }
+      .ic-nutri { grid-template-columns: 1fr; }
+      .ic-pals { grid-template-columns: 1fr; }
+    }
+    .email-box { border: 1px solid var(--clr-border); border-radius: var(--radius-md); padding: 16px; margin: 0 0 1.5rem; background: var(--clr-surface); }
+    .email-box.compact { padding: 12px 14px; margin-bottom: 1rem; }
+    .email-box-hd { font-size: 13px; font-weight: 600; color: var(--clr-text); margin-bottom: 4px; line-height: 1.4; }
+    .email-box-sub { font-size: 12px; color: var(--clr-text-sec); margin-bottom: 10px; line-height: 1.6; }
+    .email-row { display: flex; gap: 8px; }
+    .email-input { flex: 1; padding: 10px 12px; border: 1px solid var(--clr-border-md); border-radius: var(--radius-sm); font-size: 13px; font-family: var(--font); background: var(--clr-bg); color: var(--clr-text); min-width: 0; }
+    .email-input:focus { outline: none; border-color: var(--clr-teal); }
+    .email-btn { padding: 10px 16px; background: var(--clr-teal); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); white-space: nowrap; transition: background .15s; }
+    .email-btn:hover:not(:disabled) { background: var(--clr-teal-dark); }
+    .email-btn:disabled { opacity: .5; cursor: default; }
+    .email-msg { font-size: 12px; margin-top: 8px; line-height: 1.5; }
+    .email-msg.ok { color: var(--clr-teal-dark); }
+    .email-msg.err { color: #C0392B; }
+    /* LINE@ CTA card */
+    .linea-cta-card { background: #EFF6F1; border-radius: var(--radius-md); padding: 24px 20px; margin: 1.5rem 0; text-align: center; }
+    .linea-cta-title { font-size: 16px; font-weight: 700; color: var(--clr-text); margin-bottom: 10px; }
+    .linea-cta-desc { font-size: 13px; color: var(--clr-text-sec); line-height: 1.7; margin-bottom: 16px; }
+    .linea-cta-btn { display: inline-block; padding: 14px 32px; background: var(--clr-teal-dark); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; font-family: var(--font); transition: background .15s; }
+    .linea-cta-btn:hover { background: var(--clr-teal-deeper); }
+    /* Compact email box (secondary) */
+    .email-box.small { padding: 14px 16px; margin-top: 1rem; margin-bottom: 1rem; background: transparent; border: none; }
+    .email-box.small .email-box-hd, .email-box.small .email-box-sub { display: none; }
+    .email-box.small .email-box-hint { font-size: 12px; color: var(--clr-text-hint); margin-bottom: 8px; text-align: center; }
+    .email-box.small .email-row { justify-content: center; }
+    .email-box.small .email-input { max-width: 220px; padding: 8px 10px; font-size: 12px; }
+    .email-box.small .email-btn { padding: 8px 14px; font-size: 12px; }
+    .email-box.small .email-msg { text-align: center; }
+    @media (max-width: 480px) { .email-row { flex-direction: column; } .email-btn { width: 100%; } .linea-cta-btn { width: 100%; } .email-box.small .email-input { max-width: none; } }
+    .cover { padding: 1rem 0 1rem; text-align: left; }
+    .cover-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .12em; color: var(--clr-teal-dark); margin-bottom: 1.25rem; text-transform: uppercase; }
+    .cover-title { font-size: 28px; font-weight: 700; line-height: 1.3; color: var(--clr-text); margin-bottom: 1.25rem; letter-spacing: .02em; }
+    .cover-lead { font-size: 14px; color: var(--clr-text-sec); line-height: 1.85; margin-bottom: 1.25rem; }
+    .cover-lead b { color: var(--clr-text); font-weight: 600; }
+    .cover-meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--clr-text-hint); margin-bottom: 1.5rem; padding: 12px 14px; background: var(--clr-surface); border-radius: var(--radius-sm); }
+    .cover-hint { font-size: 13px; color: var(--clr-text-sec); line-height: 1.75; margin-bottom: 1.75rem; padding-left: 12px; border-left: 2px solid var(--clr-teal); }
+    .cover-cta { width: 100%; padding: 14px; font-size: 15px; font-weight: 600; }
+    @media (max-width: 480px) { .cover-title { font-size: 24px; } }
+    @media (max-width: 480px) {
+      .qc { padding: 1.25rem 1rem 2.5rem; }
+      .q-title { font-size: 16px; }
+      .freq-grid { grid-template-columns: repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="qc" id="qc">
+  <div class="prog-out"><div class="prog-in" id="prog" style="width:0%"></div></div>
+  <div id="content"></div>
+</div>
+<script>
+var SUPABASE_URL = "https://rtnnfykmbejsmcloovre.supabase.co";
+var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0bm5meWttYmVqc21jbG9vdnJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MTIzNDQsImV4cCI6MjA5MDQ4ODM0NH0.z9qexqfj4yhsIakygRx660NlDgYH-48xqr_PCQkEuRU";
+
+var DIMS  = ["身體感知","情緒調節","思維模式","行為模式","社會連結"];
+var DCOLS = ["#1D9E75","#7F77DD","#D85A30","#BA7517","#378ADD"];
+var FREQ  = ["幾乎沒有","偶爾（1-2次）","常常（3-4次）","幾乎每天"];
+
+function sendQuizResult(suffix) {
+  var input = document.getElementById("email" + suffix);
+  var btn = document.getElementById("email" + suffix + "Btn");
+  var msg = document.getElementById("email" + suffix + "Msg");
+  var email = (input.value || "").trim();
+  msg.className = "email-msg";
+  msg.textContent = "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    msg.className = "email-msg err";
+    msg.textContent = "請輸入有效的 email 地址。";
+    return;
+  }
+  var s = window.__quizSummary;
+  if (!s) {
+    msg.className = "email-msg err";
+    msg.textContent = "找不到測驗結果，請重新整理頁面。";
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "寄送中…";
+
+  // 1. Save to DB
+  var insertPromise = fetch(SUPABASE_URL + "/rest/v1/quiz_results", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal",
+    },
+    body: JSON.stringify({
+      email: email,
+      state_key: s.state_key,
+      state_name: s.state_name,
+      state_title: s.state_title,
+      dim_body: s.dim_body, dim_emotion: s.dim_emotion, dim_thought: s.dim_thought,
+      dim_behavior: s.dim_behavior, dim_social: s.dim_social,
+      pct_sym: s.pct_sym, pct_dor: s.pct_dor, pct_ven: s.pct_ven,
+      avg_well: s.avg_well, raw_answers: s.raw_answers,
+      source: "quiz-page",
+    }),
+  });
+
+  // 2. Send email via edge function
+  var idem = "quiz-" + email + "-" + Date.now();
+  var emailPromise = fetch(SUPABASE_URL + "/functions/v1/send-transactional-email", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_ANON_KEY,
+      "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      templateName: "quiz-result",
+      recipientEmail: email,
+      idempotencyKey: idem,
+      templateData: {
+        stateName: s.state_name,
+        stateTitle: s.state_title,
+        avgWell: s.avg_well,
+        topDim: { name: s.top_dim_name, pct: s.top_dim_pct },
+        lowDim: { name: s.low_dim_name, pct: s.low_dim_pct },
+        dims: [
+          { name: DIMS[0], pct: s.dim_body },
+          { name: DIMS[1], pct: s.dim_emotion },
+          { name: DIMS[2], pct: s.dim_thought },
+          { name: DIMS[3], pct: s.dim_behavior },
+          { name: DIMS[4], pct: s.dim_social },
+        ],
+        pctSym: s.pct_sym, pctDor: s.pct_dor, pctVen: s.pct_ven,
+        firstTipTitle: s.first_tip_title,
+        firstTipBody: s.first_tip_body,
+        // plant character
+        plantName: s.plant_name,
+        plantTagline: s.plant_tagline,
+        plantHashtags: s.plant_hashtags,
+        plantBodyVoice: s.plant_body_voice,
+        plantSharePct: s.plant_share_pct,
+        plantNutrients: s.plant_nutrients,
+        plantFriend: s.plant_friend,
+        plantStranger: s.plant_stranger,
+        // full results for email
+        dimInsights: s.dim_insights,
+        stateTips: s.state_tips,
+      },
+    }),
+  });
+
+  Promise.all([insertPromise, emailPromise]).then(function(results){
+    var emailOk = results[1].ok;
+    if (emailOk) {
+      msg.className = "email-msg ok";
+      msg.textContent = "✓ 已寄出！請到信箱查收（也記得看垃圾信件夾）。";
+      btn.textContent = "已寄出";
+    } else {
+      throw new Error("send failed");
+    }
+  }).catch(function(){
+    msg.className = "email-msg err";
+    msg.textContent = "寄送失敗，請稍後再試一次。";
+    btn.disabled = false;
+    btn.textContent = "寄到信箱";
+  });
+}
+
+
+var QS = [
+  {dim:0,type:"choice",q:"把注意力放在身體上，你最容易感受到什麼？",sub:"可以閉上眼睛感受幾秒再選",
+   opts:[{t:"一股說不清的緊繃或躁動，像引擎始終沒關掉",s:[4,0,0]},{t:"沉重、空洞，甚至感覺和自己的身體有些距離",s:[0,4,0]},{t:"大致放鬆，呼吸順暢，有踏實紮根的感覺",s:[0,0,4]},{t:"感覺很模糊，說不太清楚有什麼特別的感受",s:[1,3,0]}]},
+  {dim:0,type:"choice",q:"過去兩週，你的睡眠狀況比較接近哪一種？",sub:"選一個最接近你這段時間整體狀況的描述",
+   opts:[{t:"入睡困難，或淺眠、容易在半夜驚醒",s:[4,0,0]},{t:"睡很多卻還是累，起床後沒有充飽電的感覺",s:[0,4,0]},{t:"大致睡得好，起床後感覺有休息到",s:[0,0,4]},{t:"睡眠狀況不穩定，有時好有時差，波動大",s:[2,2,0]}]},
+  {dim:0,type:"freq",q:"過去兩週，你有肩頸緊繃、頭痛或肌肉痠痛的情形嗎？",sub:"每週計算幾天有這樣的身體症狀",
+   scores:[[0,0,4],[1,1,2],[2,2,0],[4,0,0]]},
+  {dim:1,type:"choice",q:"你最近的整體情緒狀態比較像哪一種？",sub:"不只是今天，而是這段時間的整體感受",
+   opts:[{t:"容易焦慮、煩躁，小事也能讓我喘不過氣",s:[4,0,0]},{t:"情緒很平，但更像麻木，很難有什麼起伏",s:[0,4,0]},{t:"情緒大致穩定，偶有壓力也能自然消化",s:[0,0,4]},{t:"有時很亢奮，有時情緒突然墜落，波動大",s:[3,1,0]}]},
+  {dim:1,type:"choice",q:"當負面情緒出現時，你通常怎麼應對？",sub:"觀察你的自然反應，不是你覺得「應該」怎麼做",
+   opts:[{t:"難以平息，情緒在腦袋裡一直轉、很久才散",s:[4,0,0]},{t:"把自己關起來，或用食物、手機、睡覺來麻痺",s:[0,3,1]},{t:"能夠感受它、讓它過去，不會困在裡面太久",s:[0,0,4]},{t:"壓下去繼續做事，但有時會在不預期的時刻爆發",s:[3,1,0]}]},
+  {dim:1,type:"freq",q:"過去兩週，相較於平常的自己，你對以前喜歡的事物明顯失去興趣或熱情嗎？",sub:"「平常的自己」指非特別壓力期的狀態，每週計算幾天有這樣的感受",
+   scores:[[0,0,4],[1,1,2],[0,3,1],[0,4,0]]},
+  {dim:2,type:"choice",q:"面對待辦事項或做決定時，你通常是？",sub:"觀察你的慣性思考模式",
+   opts:[{t:"腦袋一直轉，難以停下來，同時想很多件事",s:[4,0,0]},{t:"思緒混濁，很難集中，拖延或逃避越來越多",s:[0,4,0]},{t:"能夠聚焦，遇到問題也大致能冷靜思考",s:[0,0,4]},{t:"很努力想集中，但效率明顯比以前差很多",s:[2,2,0]}]},
+  {dim:2,type:"choice",q:"你的「內在獨白」這段時間是什麼樣子？",sub:"注意你對自己說話的方式",
+   opts:[{t:"充滿擔憂與假設：「如果……怎麼辦？」",s:[4,0,0]},{t:"空白或停滯：「反正怎樣都沒用」、「我不在乎」",s:[0,4,0]},{t:"大致上友善，偶爾自我懷疑但能調整回來",s:[0,0,4]},{t:"嚴厲批判：「我怎麼這麼差」、「我應該做到」",s:[3,0,1]}]},
+  {dim:2,type:"freq",q:"過去兩週，你有「思緒停不下來、腦袋無法真正休息」的感覺嗎？",sub:"即使在放鬆或準備睡覺時，腦袋仍持續運轉，每週計算幾天有這樣的感受",
+   scores:[[0,0,4],[1,0,3],[3,0,1],[4,0,0]]},
+  {dim:3,type:"choice",q:"這段時間，你的日常行為有哪些變化？",sub:"可能是你自己有注意到的慣性模式",
+   opts:[{t:"停不下來，用各種事情填滿自己，無法真正休息",s:[4,0,0]},{t:"什麼都不想做，喜歡的事也失去了吸引力",s:[0,4,0]},{t:"生活節奏還算正常，有休息也有行動",s:[0,0,4]},{t:"明知要休息，但做不到；或休息了也沒有充到電",s:[2,2,0]}]},
+  {dim:3,type:"choice",q:"你目前對「照顧自己」這件事的狀態是？",sub:"包含睡眠、飲食、運動、放鬆等基本自我照顧",
+   opts:[{t:"沒時間，或做了也覺得罪惡感、在浪費時間",s:[4,0,0]},{t:"有在做，但感覺像執行任務，沒有真的充到電",s:[0,3,1]},{t:"有意識地在照顧自己，大致感覺有效果",s:[0,0,4]},{t:"幾乎沒在做，也沒有能量去想這件事",s:[0,4,0]}]},
+  {dim:3,type:"freq",q:"過去兩週，你有「睡了或休息了，卻還是感覺很累」的情形嗎？",sub:"那種再多睡也充不飽的疲憊感，每週計算幾天有這樣的感受",
+   scores:[[0,0,4],[1,1,2],[1,2,1],[0,4,0]]},
+  {dim:4,type:"choice",q:"最近與他人相處，你比較有什麼感受？",sub:"包含家人、朋友、同事等日常互動",
+   opts:[{t:"容易對身邊的人不耐煩，或很在意別人的反應",s:[4,0,0]},{t:"想一個人待著，對社交沒什麼動力或興趣",s:[0,4,0]},{t:"大致享受與人互動，連結感穩固",s:[0,0,4]},{t:"需要有人陪，但不確定怎麼開口或靠近",s:[1,2,1]}]},
+  {dim:4,type:"choice",q:"在人際關係中，你最近最常感覺？",sub:"不需要評判，如實選擇最接近你狀態的描述",
+   opts:[{t:"警戒：隨時在判斷別人的反應或意圖",s:[4,0,0]},{t:"隔離：和身邊的人有距離感，很難真正連結",s:[0,4,0]},{t:"安全：能在關係裡真實表達，感覺被接納",s:[0,0,4]},{t:"表演：一直在扮演某個角色，覺得很耗能",s:[2,2,0]}]},
+  {dim:4,type:"freq",q:"過去兩週，你有「即使身邊有人，仍感覺孤單或難以真正連結」的感覺嗎？",sub:"那種在人群中仍感到隔離的狀態，每週計算幾天有這樣的感受",
+   scores:[[0,0,4],[1,1,2],[0,3,1],[0,4,0]]}
+];
+
+var STATES = {
+  sym:{name:"備戰停不下來",tc:"#633806",bg:"#FAEEDA",title:"你的神經系統正在「全速運轉」",
+    desc:"你的系統目前處於高度警戒狀態，就像一台引擎一直開著、無法熄火。身體時刻準備應對威脅，即使威脅不一定真實存在。這是神經系統在用它的方式保護你。",
+    tips:[{t:"延長吐氣，給系統「安全訊號」",b:"試試 4-7-8 呼吸：吸 4 拍、屏 7 拍、吐 8 拍。延長吐氣能直接活化迷走神經，告訴系統現在是安全的。每天早晨或睡前各做一輪。"},
+          {t:"透過動作釋放積累的壓力能量",b:"交感神經啟動時，身體備有大量待用的應急能量。散步、搖動身體、溫和拉伸，讓這些能量自然流動消散，不需要激烈運動。"},
+          {t:"每天給自己一個「安全時刻」",b:"刻意創造一段不需要警覺的時間：泡茶、坐在窗邊、把手放在胸口感受呼吸。讓系統練習「現在不用備戰」。"}]},
+  dor:{name:"低電量關機",tc:"#042C53",bg:"#E6F1FB",title:"你的神經系統正在「靜止自保」",
+    desc:"你的系統進入了一種自我保護的關閉模式，就像動物本能的裝死反應。這是長期超載後自動觸發的機制，讓人感覺麻木、沉重、提不起勁。這是系統在用它最深層的方式保護你。",
+    tips:[{t:"從「微小動作」開始，不要強迫大目標",b:"凍結狀態下，大目標只會加重無力感。試試每天只做一件很小的事：曬 5 分鐘太陽、喝一杯溫水、感覺腳踩在地上。"},
+          {t:"用溫度與觸覺喚醒神經系統",b:"溫水澡、熱敷包，或雙手搓熱後放在胸口，溫暖的觸覺能傳遞「安全」訊號給神經系統，溫和地協助解凍。"},
+          {t:"哼唱或發聲，啟動迷走神經",b:"迷走神經連結喉嚨。輕輕哼唱、或只是振動喉嚨發出長長的「嗯」音，都能直接刺激腹側迷走神經，幫助系統從凍結中醒來。"}]},
+  ven:{name:"安穩在線",tc:"#04342C",bg:"#E1F5EE",title:"你的神經系統目前在「安全窗口」裡",
+    desc:"你目前的神經系統相對穩定，處在一個能夠思考、感受、真實連結的安全區域。這不代表沒有壓力，而是你的系統有能力消化和調節這些壓力。現在是深化自我照顧的好時機。",
+    tips:[{t:"維護讓你有「紮根感」的日常儀式",b:"不論是晨間伸展、冥想、或是一杯安靜的茶，找到你的定錨儀式並定期回到它。穩定需要有意識地維持。"},
+          {t:"練習更精細的身體感知",b:"每天花幾分鐘做「身體掃描」，不帶評判地觀察不同部位的感覺。這能強化你的內感知能力，也是情緒調節的重要基礎。"},
+          {t:"為未來的困難期儲備調節工具",b:"趁狀態穩定時，練習更多身心工具（呼吸技術、正念陰瑜珈、森林慢走），讓它們在困難時能真正派上用場。"}]}
+};
+
+// 神經狀態 → 植物角色
+var PLANTS = {
+  ven: {
+    name: "多肉",
+    img: "/quiz-plant-succulent.png",
+    tagline: "不需要太多澆水也能活，自帶儲水能力，可以好好照顧自己。",
+    hashtags: ["#自帶儲水", "#不爭不搶", "#穩穩生長"],
+    bodyVoice: '「我現在還算穩，謝謝你最近有好好聽我說話。我們可以一起把這份穩定再養大一點，準備好下次風來時的力氣。」',
+    sharePct: 28, // 同款植物比例（人口參考值）
+    nutrients: [
+      { lbl: "適合的環境", body: "有陽光但不曝曬的窗邊。每天 5–10 分鐘曬太陽就夠。" },
+      { lbl: "適合的練習", body: "正念陰瑜珈、森林慢走、感謝日誌。深化你已經有的穩定。" },
+      { lbl: "要避開的事", body: "別因為現在很穩就一直攬事。多肉爛根都是因為被澆太多水。" },
+    ],
+    friend: { name: "苔蘚", img: "/quiz-plant-moss.png", reason: "你的穩定能讓苔蘚安心趴著休息" },
+    stranger: { name: "捕蠅草", img: "/quiz-plant-venus.png", reason: "對方的警戒模式偶爾會讓你覺得太緊張" },
+  },
+  sym: {
+    name: "捕蠅草",
+    img: "/quiz-plant-venus.png",
+    tagline: "雷達全開，偵測到任何動靜都會立刻反應，消耗大量能量。",
+    hashtags: ["#敏感雷達", "#隨時警戒", "#太認真了"],
+    bodyVoice: '「我最近一直在備戰，沒辦法真的鬆下來。我其實很想休息，但我還沒收到『現在是安全的』這個訊號。可以慢慢給我嗎？」',
+    sharePct: 34,
+    nutrients: [
+      { lbl: "適合的環境", body: "安靜、低刺激的角落。減少同時開太多視窗、同時聽太多聲音。" },
+      { lbl: "適合的練習", body: "延長吐氣的呼吸（4-7-8）、溫和散步、搖動身體釋放能量。" },
+      { lbl: "要避開的事", body: "咖啡因、社群刷動、晚上看新聞。這些會繼續餵養你的雷達。" },
+    ],
+    friend: { name: "多肉", img: "/quiz-plant-succulent.png", reason: "對方的穩定會讓你的雷達知道可以稍微放下" },
+    stranger: { name: "捕蠅草", img: "/quiz-plant-venus.png", reason: "兩株捕蠅草放在一起會互相觸發，雷達都更開" },
+  },
+  dor: {
+    name: "苔蘚",
+    img: "/quiz-plant-moss.png",
+    tagline: "趴在地上，安靜潮濕，不長高也不開花，把自己縮到很小很小。",
+    hashtags: ["#節能模式", "#安靜回神", "#慢慢來就好"],
+    bodyVoice: '「我這陣子有點累，所以暫時把音量關小了。不是不在乎，是我需要一點時間慢慢回來。可以陪我走小小的一步就好嗎？」',
+    sharePct: 22,
+    nutrients: [
+      { lbl: "適合的環境", body: "溫暖、潮濕、不被打擾的角落。一杯熱水、一張毛毯、一束陽光就夠。" },
+      { lbl: "適合的練習", body: "曬 5 分鐘太陽、哼長音「嗯—」、雙手搓熱放胸口。微小到不會抗拒的動作。" },
+      { lbl: "要避開的事", body: "別逼自己振作或設大目標。苔蘚不需要開花也是植物。" },
+    ],
+    friend: { name: "多肉", img: "/quiz-plant-succulent.png", reason: "對方不會逼你做什麼，只是穩穩地在旁邊" },
+    stranger: { name: "捕蠅草", img: "/quiz-plant-venus.png", reason: "對方的高警戒節奏對現在的你來說太快了" },
+  },
+};
+
+// 改用陣列索引對應 DIMS 順序：0=身體感知 1=情緒調節 2=思維模式 3=行為模式 4=社會連結
+var DIMDATA = [
+  // 0 身體感知
+  {high:{i:"你的身體目前正以緊繃和敏感傳遞過載的訊號，肌肉、呼吸、心跳都在說：系統正在備戰中。",tip:"每天練習 2 分鐘「身體掃描」：從腳底開始，只是觀察感覺，不改變也不評判。讓注意力回到身體，是安撫交感系統的第一步。"},
+   mid:{i:"你的身體偶爾發出一些緊繃或疲勞的訊號，目前還在可承受的範圍，但值得多一點關注。",tip:"試試「一個深呼吸」練習：每天在感覺到輕微緊繃時，刻意做一次完整的深呼吸，吸氣時腹部鼓起，吐氣時讓肩膀自然下沉。"},
+   low:{i:"你的身體感知目前相對清晰穩定，這是神經系統健康的重要指標。",tip:"嘗試正念陰瑜珈的長時間停留，深化對身體細微感覺的觀察力，累積更厚的身心韌性。"}},
+  // 1 情緒調節
+  {high:{i:"你的情緒系統目前高度敏感，容易被小刺激牽動，情緒的起伏比你能掌控的還快。",tip:"試試「情緒氣象站」練習：給當下情緒命名（如「焦慮」），在心裡說「我注意到我有焦慮」，創造觀察者的距離，而不是被情緒淹沒。"},
+   mid:{i:"你的情緒調節能力還在，但這段時間偶爾會感到比平常更難消化某些情緒，需要多一點力氣才能保持平穩。",tip:"試著每天結束前回顧一個今天出現的情緒，只是命名它，不需要分析原因。持續練習，情緒辨識會變得更自然。"},
+   low:{i:"你的情緒調節能力目前相對良好，能夠感受情緒又不被淹沒，這是珍貴的內在資源。",tip:"練習在情緒出現時停留 5 秒感受它，再決定如何回應，持續深化你的情緒彈性。"}},
+  // 2 思維模式
+  {high:{i:"你的思維目前容易陷入過度分析和預期性焦慮的迴圈，腦袋像一台停不下來的機器。",tip:"設定一個「擔憂時間」：每天只允許自己在固定的 15 分鐘內擔憂，其他時候把念頭記下來延後處理，替擔憂創造邊界。"},
+   mid:{i:"你的思維這段時間有些摩擦感，有時難以集中，有時腦袋轉個不停，效率或決策能力比平常稍微費力一些。",tip:"試試「三件事法則」：每天早上只列出三件最重要的事，其他的先放著。減少認知負荷，讓思維有空間運作。"},
+   low:{i:"你的思維模式目前清晰而有彈性，能夠看到不同角度，這是解決問題的重要基礎。",tip:"嘗試每週寫一次「感謝日誌」，持續強化正向認知模式，在穩定期主動建立心理資源。"}},
+  // 3 行為模式
+  {high:{i:"你目前可能用「忙碌」或「過度行動」來迴避身體發出的停止訊號，停不下來本身也是一種壓力反應。",tip:"刻意在每天加入一個「無生產力時刻」：坐著，什麼都不做，只是存在。從 3 分鐘開始，讓系統練習「不需要一直做事才有價值」。"},
+   mid:{i:"你的行為節奏這段時間有些不規律，有時過度運轉，有時又提不起勁，充電的效率比平常差一些。",tip:"試試「固定的休息儀式」：在一天中設定一個固定時間點完全放下手邊的事，哪怕只有 10 分鐘，讓系統學習「到這個時間就可以停」。"},
+   low:{i:"你的行為模式目前平衡，能在行動與休息之間找到自然的節奏。",tip:"定期檢視哪些活動真正讓你充電，哪些只是讓你分心，將前者有意識地排進週計畫。"}},
+  // 4 社會連結
+  {high:{i:"你目前的神經系統在人際中容易進入「評估威脅」的模式，難以真正放鬆地與人連結。",tip:"尋找一個讓你感到安全的人，練習「並肩存在」，一起看電視、散步，不需要深度對話。安全感從共同在場開始建立。"},
+   mid:{i:"你的社會連結大致還在，但這段時間與人相處有時感覺比平常費力，或偶爾出現一點隔離感。",tip:"觀察你的「社交充電模式」：哪一種互動方式讓你感覺充飽（一對一深聊、小群組、還是只是陪伴），刻意增加那種形式的相處。"},
+   low:{i:"你的社會連結感目前穩固，能在關係裡真實表達和接收支持，這是心理健康非常重要的保護因子。",tip:"深化「安全連結」的質量：和你信任的人分享一件真實的感受，而不只是生活資訊的交換。"}}
+];
+
+var DIMMAX = 12;
+var cur = -1; // -1 = cover screen
+var ans = new Array(QS.length).fill(-1);
+
+function dimScores() {
+  var d = [0,0,0,0,0];
+  for (var i = 0; i < QS.length; i++) {
+    if (ans[i] < 0) continue;
+    var sc = QS[i].type === "choice" ? QS[i].opts[ans[i]].s : QS[i].scores[ans[i]];
+    d[QS[i].dim] += sc[0];
+  }
+  return d;
+}
+
+function stateScores() {
+  var sym=0, dor=0, ven=0;
+  for (var i = 0; i < QS.length; i++) {
+    if (ans[i] < 0) continue;
+    var sc = QS[i].type === "choice" ? QS[i].opts[ans[i]].s : QS[i].scores[ans[i]];
+    sym += sc[0]; dor += sc[1]; ven += sc[2];
+  }
+  return {sym:sym, dor:dor, ven:ven};
+}
+
+function overallState() {
+  var s = stateScores();
+  if (s.ven > s.sym && s.ven > s.dor) return "ven";
+  if (s.sym >= s.dor) return "sym";
+  return "dor";
+}
+
+// 反向計分：傳入「健康分數百分比」（越高越穩定）
+function dimLevel(wellPct) {
+  if (wellPct >= 70) return {key:"low",  lbl:"相對穩定", bg:"#E1F5EE", tc:"#085041"};
+  if (wellPct >= 45) return {key:"mid",  lbl:"輕度張力", bg:"#E6F1FB", tc:"#042C53"};
+  return                    {key:"high", lbl:"需要關注", bg:"#FAEEDA", tc:"#633806"};
+}
+
+function render() {
+  var content = document.getElementById("content");
+  var prog = document.getElementById("prog");
+  if (cur < 0) {
+    prog.style.width = "0%";
+    showCover(content);
+    return;
+  }
+  prog.style.width = Math.round(cur / QS.length * 100) + "%";
+  if (cur >= QS.length) { showResult(content); return; }
+  var q = QS[cur];
+  var isFreq = q.type === "freq";
+  var body = "";
+  if (isFreq) {
+    body = '<div class="freq-grid">';
+    for (var i = 0; i < FREQ.length; i++) {
+      body += '<button class="freq-btn' + (ans[cur]===i?" selected":"") + '" onclick="sel(' + i + ')">' + FREQ[i] + '</button>';
+    }
+    body += '</div>';
+  } else {
+    for (var i = 0; i < q.opts.length; i++) {
+      body += '<button class="opt-btn' + (ans[cur]===i?" selected":"") + '" onclick="sel(' + i + ')"><span class="opt-ltr">' + "ABCD"[i] + '</span>' + q.opts[i].t + '</button>';
+    }
+  }
+  var isLast = cur === QS.length - 1;
+  content.innerHTML =
+    '<p class="dim-lbl">' + (cur+1) + ' / ' + QS.length + '　·　' + DIMS[q.dim] + '</p>' +
+    '<p class="q-title">' + q.q + '</p>' +
+    '<p class="q-sub">' + q.sub + '</p>' +
+    body +
+    '<div class="nav-row">' +
+    '<button class="btn-back" onclick="goBack()" style="' + (cur===0?"visibility:hidden":"") + '">← 上一題</button>' +
+    '<button class="btn-next' + (isLast?" primary":"") + '" onclick="goNext()"' + (ans[cur]<0?" disabled":"") + '>' + (isLast?"查看我的全景圖 →":"下一題") + '</button>' +
+    '</div>';
+}
+
+function showCover(content) {
+  content.innerHTML =
+    '<div class="cover">' +
+    '<p class="cover-eyebrow">KAIA · 神經系統自我覺察</p>' +
+    '<h1 class="cover-title">神經系統<br/>身心狀態全景測驗</h1>' +
+    '<p class="cover-lead"><b>你的身體比你更早知道你的狀態。</b></p>' +
+    '<p class="cover-lead">可能是睡醒了還是累、可能是明明沒做什麼卻無法放鬆、可能是身邊有人，卻仍感覺一個人。</p>' +
+    '<p class="cover-lead">這份測驗的設計，來自一個我在工作中反覆觀察到的現象：很多人知道自己「壓力很大」，卻不太清楚自己的身心正在以哪種方式回應這個壓力。</p>' +
+    '<p class="cover-lead">測驗的框架來自神經科學家 Stephen Porges 提出的多重迷走神經理論，核心概念是——我們的神經系統會在不同情境下自動切換三種狀態：<b>高度警戒的備戰、沉重麻木的關閉、或是穩定安全的連結</b>。這三種狀態不是性格問題，而是身體保護自己的方式。</p>' +
+    '<p class="cover-lead">五個向度（<b>身體感知、情緒調節、思維模式、行為模式、社會連結</b>）則是我根據這個理論框架延伸設計的，目的是讓你看見不同面向的自己，而不只是得到一個分數。</p>' +
+    '<p class="cover-lead">這不是臨床診斷工具，是一個讓你停下來、看看自己的邀請。</p>' +
+    '<div class="cover-meta"><span>· 約 5 分鐘</span><span>· 共 15 題</span><span>· 完全匿名</span></div>' +
+    '<p class="cover-hint">建議在一個安靜的時刻作答，感受身體後再選擇最接近的描述。沒有對錯，越誠實，鏡子就越清晰。</p>' +
+    '<button class="btn-next primary cover-cta" onclick="startQuiz()">開始測驗 →</button>' +
+    '</div>';
+}
+
+function startQuiz() { cur = 0; window.scrollTo({top:0, behavior:"smooth"}); render(); }
+
+function sel(i) { ans[cur] = i; render(); }
+function goBack() { if (cur > 0) { cur--; render(); } }
+function goNext() { if (ans[cur] < 0) return; cur++; render(); }
+
+function showResult(content) {
+  document.getElementById("prog").style.width = "100%";
+  var key = overallState();
+  var st = STATES[key];
+  var ds = dimScores();
+  var s = stateScores();
+  var tot = s.sym + s.dor + s.ven || 1;
+  var sp = Math.round(s.sym/tot*100);
+  var dp = Math.round(s.dor/tot*100);
+  var vp = Math.round(s.ven/tot*100);
+
+  var tipsHtml = "";
+  for (var i = 0; i < st.tips.length; i++) {
+    tipsHtml += '<div class="g-tip"><p class="g-tip-title">' + st.tips[i].t + '</p><p class="g-tip-body">' + st.tips[i].b + '</p></div>';
+  }
+
+  // 反向計分：原 ds[i] 是壓力分數，轉換為「健康／穩定分數」（越高越好）
+  var wellPcts = ds.map(function(v){ return Math.max(0, Math.min(100, Math.round((1 - v/DIMMAX) * 100))); });
+
+  var dimHtml = "";
+  for (var i = 0; i < DIMS.length; i++) {
+    var pct = wellPcts[i];
+    var lv = dimLevel(pct);
+    var dd = DIMDATA[i][lv.key];
+    dimHtml +=
+      '<div class="dim-card" style="border-left-color:' + DCOLS[i] + '">' +
+      '<div class="dim-card-hd">' +
+      '<span class="dim-card-name" style="color:' + DCOLS[i] + '">' + DIMS[i] + '</span>' +
+      '<span class="dim-badge" style="background:' + lv.bg + ';color:' + lv.tc + '">' + lv.lbl + '</span>' +
+      '</div>' +
+      '<div class="score-track"><div class="score-fill" style="width:' + pct + '%;background:' + DCOLS[i] + '"></div></div>' +
+      '<p class="dim-insight">' + dd.i + '</p>' +
+      '<div class="dim-tip-box"><span class="tip-micro">今日可以嘗試</span>' + dd.tip + '</div>' +
+      '</div>';
+  }
+
+  // 摘要卡：找出最穩定（高分）與最需關注（低分）的向度
+  var maxIdx = 0, minIdx = 0;
+  for (var k = 1; k < wellPcts.length; k++) {
+    if (wellPcts[k] > wellPcts[maxIdx]) maxIdx = k;
+    if (wellPcts[k] < wellPcts[minIdx]) minIdx = k;
+  }
+  var lowDimLv = dimLevel(wellPcts[minIdx]);
+  var lowDimData = DIMDATA[minIdx][lowDimLv.key];
+  var firstTip = st.tips[0];
+  var avgWell = Math.round(wellPcts.reduce(function(a,b){return a+b;},0) / wellPcts.length);
+
+  var plant = PLANTS[key];
+  var tagsHtml = "";
+  for (var t = 0; t < plant.hashtags.length; t++) {
+    tagsHtml += '<span class="infocard-tag" style="color:' + st.tc + '">' + plant.hashtags[t] + '</span>';
+  }
+
+  var bodyVoiceLine = plant.bodyVoice;
+
+  // 養分區塊
+  var nutriHtml = '<div class="ic-nutri">';
+  for (var n = 0; n < plant.nutrients.length; n++) {
+    nutriHtml +=
+      '<div class="ic-nutri-cell">' +
+        '<div class="ic-nutri-lbl">' + plant.nutrients[n].lbl + '</div>' +
+        '<div class="ic-nutri-body">' + plant.nutrients[n].body + '</div>' +
+      '</div>';
+  }
+  nutriHtml += '</div>';
+
+  // 合拍 / 暫時不合拍植物
+  var palsHtml =
+    '<div class="ic-pals">' +
+      '<div class="ic-pal">' +
+        '<img src="' + plant.friend.img + '" alt="" />' +
+        '<div class="ic-pal-text">' +
+          '<div class="ic-pal-lbl">合拍植物</div>' +
+          '<div class="ic-pal-name">' + plant.friend.name + '</div>' +
+          '<div class="ic-pal-reason">' + plant.friend.reason + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ic-pal">' +
+        '<img src="' + plant.stranger.img + '" alt="" />' +
+        '<div class="ic-pal-text">' +
+          '<div class="ic-pal-lbl">暫時不合拍</div>' +
+          '<div class="ic-pal-name">' + plant.stranger.name + '</div>' +
+          '<div class="ic-pal-reason">' + plant.stranger.reason + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  var summaryCard =
+    '<div class="infocard">' +
+      '<img class="infocard-mascot" src="' + plant.img + '" alt="" />' +
+      '<div class="infocard-eyebrow">你的身體目前最像哪一種植物…</div>' +
+      '<div class="infocard-title" style="color:' + st.tc + '">' + plant.name + '</div>' +
+      '<div class="infocard-tags">' + tagsHtml + '</div>' +
+      '<div class="infocard-stat">' + plant.tagline + '<br/>整體穩定度 <b>' + avgWell + '%</b>　·　約 <b>' + plant.sharePct + '%</b> 的人和你是同款植物</div>' +
+      '<div class="ic-block">' +
+        '<div class="ic-block-hd"><span class="ic-emoji">🌿</span>身體想跟你說</div>' +
+        '<div class="ic-block-body quote">' + bodyVoiceLine + '</div>' +
+      '</div>' +
+      '<div class="ic-stats">' +
+        '<div class="ic-stat">' +
+          '<div class="ic-stat-hd">最有力的部分</div>' +
+          '<div class="ic-stat-body">' +
+            '<div class="ic-stat-main" style="color:' + DCOLS[maxIdx] + '">' + DIMS[maxIdx] + '</div>' +
+            '<div class="ic-stat-sub">' + wellPcts[maxIdx] + '% 穩定</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ic-stat">' +
+          '<div class="ic-stat-hd">整體穩定度</div>' +
+          '<div class="ic-stat-body">' +
+            '<div class="ic-stat-main" style="color:' + st.tc + '">' + avgWell + '%</div>' +
+            '<div class="ic-stat-sub">五項平均</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ic-stat">' +
+          '<div class="ic-stat-hd">最想被照顧</div>' +
+          '<div class="ic-stat-body">' +
+            '<div class="ic-stat-main" style="color:' + DCOLS[minIdx] + '">' + DIMS[minIdx] + '</div>' +
+            '<div class="ic-stat-sub">' + wellPcts[minIdx] + '% 穩定</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      nutriHtml +
+      palsHtml +
+      '<div class="ic-action">' +
+        '<div class="ic-action-icon">🌱</div>' +
+        '<div class="ic-action-text">' +
+          '<div class="ic-action-lbl">今天可以做的一件小事</div>' +
+          '<div class="ic-action-body">' + firstTip.t + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+
+  // 把摘要資料快取到 window，供 email handler 使用
+  window.__quizSummary = {
+    state_key: key,
+    state_name: st.name,
+    state_title: st.title,
+    avg_well: avgWell,
+    dim_body: wellPcts[0], dim_emotion: wellPcts[1], dim_thought: wellPcts[2],
+    dim_behavior: wellPcts[3], dim_social: wellPcts[4],
+    pct_sym: sp, pct_dor: dp, pct_ven: vp,
+    top_dim_name: DIMS[maxIdx], top_dim_pct: wellPcts[maxIdx],
+    low_dim_name: DIMS[minIdx], low_dim_pct: wellPcts[minIdx],
+    first_tip_title: firstTip.t, first_tip_body: firstTip.b,
+    raw_answers: ans.slice(),
+    // plant payload for email
+    plant_name: plant.name,
+    plant_tagline: plant.tagline,
+    plant_hashtags: plant.hashtags,
+    plant_body_voice: plant.bodyVoice,
+    plant_share_pct: plant.sharePct,
+    plant_nutrients: plant.nutrients,
+    plant_friend: plant.friend,
+    plant_stranger: plant.stranger,
+    // dim insights for email
+    dim_insights: wellPcts.map(function(p, idx){
+      var lv = dimLevel(p);
+      var dd = DIMDATA[idx][lv.key];
+      return { name: DIMS[idx], pct: p, level: lv.lbl, insight: dd.i, tip: dd.tip };
+    }),
+    // state-level tips (3)
+    state_tips: st.tips,
+  };
+
+  var lineaCta =
+    '<div class="linea-cta-card">' +
+      '<div class="linea-cta-title">想把這些練習真正做起來？</div>' +
+      '<div class="linea-cta-desc">加入LINE@，每月收到免費線上正念陰瑜珈體驗連結、身心照顧資源，和最新課程通知。</div>' +
+      '<a class="linea-cta-btn" href="https://lin.ee/WJcPZiC" target="_blank" rel="noopener noreferrer">加入LINE@</a>' +
+    '</div>';
+
+  var emailBottomBox =
+    '<div class="email-box small">' +
+      '<div class="email-box-hint">或是將結果寄到信箱，方便日後回查</div>' +
+      '<div class="email-row">' +
+        '<input type="email" class="email-input" id="emailBottom" placeholder="your@email.com" autocomplete="email" />' +
+        '<button class="email-btn" id="emailBottomBtn" onclick="sendQuizResult(\'Bottom\')">寄到信箱</button>' +
+      '</div>' +
+      '<div class="email-msg" id="emailBottomMsg"></div>' +
+    '</div>';
+
+  content.innerHTML =
+    '<span class="state-badge" style="background:' + st.bg + ';color:' + st.tc + '">' + st.name + '</span>' +
+    '<p class="result-title">' + st.title + '</p>' +
+    '<p class="result-desc">' + st.desc + '</p>' +
+    summaryCard +
+    '<p class="sec-lbl">你的五向度全景圖</p>' +
+    '<div class="radar-wrap"><canvas id="radar" role="img" aria-label="五向度神經系統狀態雷達圖"></canvas></div>' +
+    '<div class="panorama-legend">這張圖把你的五個面向同時攤開來看，形成一個「面」。<br/>' +
+    '<b>越往外延伸（面越大）</b>＝該面向越穩定、負擔越小，越不需要擔心；<br/>' +
+    '<b>越靠近中心（面越小）</b>＝該面向目前承受的壓力越大，越需要被關注。<br/>越接近完整正圓，代表整體越穩定；某個方向特別內凹，就是身體在告訴你「這裡需要被照顧」。</div>' +
+    '<div class="kaia-note">' +
+    '<p class="kaia-note-hd">KAIA 給你的悄悄話</p>' +
+    '<p class="kaia-note-body">你或許沒有察覺，但在剛剛回答這 15 道題的時候，你已經在做身體覺察了。每一次停下來感受「我現在是不是這樣」，都是身體與你對話的瞬間。這份能力本來就在你身上，你只是重新練習傾聽它。看見，就是改變的開始。</p>' +
+    '</div>' +
+    '<div class="divider"></div>' +
+    '<p class="sec-lbl">五個向度全景解析</p>' +
+    dimHtml +
+    '<div class="divider"></div>' +
+    '<p class="sec-lbl">整體神經狀態的身心調適建議</p>' +
+    '<div class="sbar-section">' +
+    '<div class="sbar-row"><span class="sbar-lbl">備戰狀態</span><div class="sbar-track"><div class="sbar-fill" id="sb0" style="width:0%;background:#EF9F27"></div></div><span class="sbar-pct" id="sp0">0%</span></div>' +
+    '<div class="sbar-row"><span class="sbar-lbl">低電狀態</span><div class="sbar-track"><div class="sbar-fill" id="sb1" style="width:0%;background:#85B7EB"></div></div><span class="sbar-pct" id="sp1">0%</span></div>' +
+    '<div class="sbar-row"><span class="sbar-lbl">安穩狀態</span><div class="sbar-track"><div class="sbar-fill" id="sb2" style="width:0%;background:#1D9E75"></div></div><span class="sbar-pct" id="sp2">0%</span></div>' +
+    '</div>' +
+    tipsHtml +
+    lineaCta +
+    emailBottomBox +
+    '<div class="divider"></div>' +
+    '<p class="disclaimer">這份測驗依據多重迷走神經理論設計，是自我探索的參考工具，無法取代專業心理健康評估。如果你的狀態已持續困擾日常生活，建議尋求專業心理師協助。</p>' +
+    '<button class="restart-btn" onclick="restart()">重新測驗</button>';
+
+  setTimeout(function() {
+    document.getElementById("sb0").style.width = sp+"%"; document.getElementById("sp0").textContent = sp+"%";
+    document.getElementById("sb1").style.width = dp+"%"; document.getElementById("sp1").textContent = dp+"%";
+    document.getElementById("sb2").style.width = vp+"%"; document.getElementById("sp2").textContent = vp+"%";
+    
+    new Chart(document.getElementById("radar"), {
+      type: "radar",
+      data: {
+        labels: DIMS,
+        datasets: [{
+          data: wellPcts,
+          backgroundColor: "rgba(29,158,117,0.12)",
+          borderColor: "#1D9E75", borderWidth: 1.5,
+          pointBackgroundColor: DCOLS, pointBorderColor: DCOLS,
+          pointRadius: 4, pointHoverRadius: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { r: { min:0, max:100,
+          ticks: { stepSize:25, display:false },
+          grid: { color:"rgba(0,0,0,0.07)", lineWidth:0.5 },
+          angleLines: { color:"rgba(0,0,0,0.07)", lineWidth:0.5 },
+          pointLabels: { font:{ size:11 }, color:"rgba(0,0,0,0.45)" }
+        }}
+      }
+    });
+  }, 150);
+}
+
+function restart() {
+  cur = -1;
+  ans = new Array(QS.length).fill(-1);
+  window.scrollTo({top:0, behavior:"smooth"});
+  render();
+}
+
+// Demo mode: ?demo=sym | dor | ven 直接跳到結果頁，不必做測驗
+(function(){
+  var m = (location.search.match(/[?&]demo=(sym|dor|ven)/) || [])[1];
+  if (!m) { render(); return; }
+  // 為每題挑一個分數偏向指定狀態的選項
+  var idxMap = { sym: 0, dor: 1, ven: 2 };
+  var target = idxMap[m];
+  for (var i = 0; i < QS.length; i++) {
+    var q = QS[i];
+    var opts = q.type === "choice" ? q.opts.map(function(o){return o.s;}) : q.scores;
+    var best = 0, bestVal = -1;
+    for (var j = 0; j < opts.length; j++) {
+      if (opts[j][target] > bestVal) { bestVal = opts[j][target]; best = j; }
+    }
+    ans[i] = best;
+  }
+  cur = QS.length;
+  render();
+})();
+</script>
+</body>
+</html>

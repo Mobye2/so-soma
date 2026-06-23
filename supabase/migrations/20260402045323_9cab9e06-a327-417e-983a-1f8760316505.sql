@@ -1,0 +1,1 @@
+CREATE POLICY "Event registrations viewable by anyone" ON public.event_registrations FOR SELECT TO public USING (true);

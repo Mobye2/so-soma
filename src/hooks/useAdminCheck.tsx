@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "./useAuth";
+import { useAuth, userPool } from "./useAuth";
 
 export const useAdminCheck = () => {
   const { user, loading: authLoading } = useAuth();
@@ -8,22 +7,34 @@ export const useAdminCheck = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading) {
+      return;
+    }
     if (!user) {
       setIsAdmin(false);
       setLoading(false);
       return;
     }
 
-    const checkAdmin = async () => {
-      const { data } = await supabase.rpc("has_role", {
-        _user_id: user.id,
-        _role: "admin",
-      });
-      setIsAdmin(!!data);
+    const cognitoUser = userPool.getCurrentUser();
+    if (!cognitoUser) {
+      setIsAdmin(false);
       setLoading(false);
-    };
-    checkAdmin();
+      return;
+    }
+
+    cognitoUser.getSession((err: Error | null, session: any) => {
+      if (err || !session?.isValid()) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+
+      const payload = session.getIdToken().decodePayload();
+      const groups: string[] = payload["cognito:groups"] || [];
+      setIsAdmin(groups.includes("admin"));
+      setLoading(false);
+    });
   }, [user, authLoading]);
 
   return { isAdmin, loading: loading || authLoading, user };

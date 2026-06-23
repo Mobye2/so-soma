@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Solis Somatic Backend
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  # Shared Layer (supabase-py, python-jose, etc.)
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: solis-shared-deps
+      ContentUri: layers/shared/
+      CompatibleRuntimes:
+        - python3.13
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: python3.13
+
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowOrigin: "'https://www.solisforest.com,http://localhost:5173'"
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+
+  CreateOrderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/create_order/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: https://clyvbsxlmhozbaoktfsl.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /orders
+            Method: POST
+
+Parameters:
+  SupabaseServiceKey:
+    Type: String
+    NoEcho: true
+    Description: Supabase Service Role Key
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"

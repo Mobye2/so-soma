@@ -4,6 +4,22 @@
 .env.*.local
 .env.secrets
 
+# AWS SAM
+.aws-sam/
+backend/layers/shared/python/
+backend/.aws-sam/
+backend/venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+.venv/
+.env/
+
 # Logs
 logs
 *.log

@@ -5,6 +5,7 @@ import uuid
 from typing import Dict, List, Optional, Any
 from supabase import create_client, Client
 from jose import jwt, JWTError
+import boto3
 
 
 def is_uuid(value: str) -> bool:
@@ -28,11 +29,10 @@ def validate_cognito_token(auth_header: str, customer_email: str) -> bool:
     
     token = auth_header.replace('Bearer ', '')
     try:
-        # For now, skip JWT validation - in production, validate with Cognito public keys
-        # payload = jwt.decode(token, options={"verify_signature": False})
-        # email = payload.get('email', '').lower()
-        # return email == customer_email.strip().lower()
-        return True  # Placeholder - implement proper JWT validation later
+        # Decode without verification for now (add JWKS verification in production)
+        payload = jwt.decode(token, options={"verify_signature": False})
+        token_email = payload.get('email', '').lower()
+        return token_email == customer_email.strip().lower()
     except JWTError:
         return False
 
@@ -165,7 +165,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             supabase.table('event_registrations').insert(registrations).execute()
 
-            # TODO: Send event confirmation emails via SQS/SES
+            # Send event confirmation emails via Lambda invoke
+            try:
+                lambda_client = boto3.client('lambda')
+                for item in event_items:
+                    payload = {
+                        'httpMethod': 'POST',
+                        'body': json.dumps({
+                            'templateName': 'event-registration-confirmation',
+                            'recipientEmail': customer_email,
+                            'idempotencyKey': f'event-reg-{order_id}-{item["id"]}',
+                            'templateData': {'name': customer_name, 'eventTitle': item['title']},
+                        }),
+                    }
+                    lambda_client.invoke(
+                        FunctionName=os.environ.get('SEND_EMAIL_FUNCTION_NAME', 'solis-backend-SendTransactionalEmailFunction'),
+                        InvocationType='Event',
+                        Payload=json.dumps(payload),
+                    )
+            except Exception as email_err:
+                print(f'Event email failed: {email_err}')
 
         return {
             'statusCode': 200,

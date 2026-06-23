@@ -1,0 +1,5 @@
+{
+  "httpMethod": "POST",
+  "headers": {},
+  "body": "{\"templateName\":\"event-registration-confirmation\",\"recipientEmail\":\"mouthbomb@hotmail.com\",\"templateData\":{\"name\":\"Test\",\"eventTitle\":\"森林療癒半日體驗\"}}"
+}

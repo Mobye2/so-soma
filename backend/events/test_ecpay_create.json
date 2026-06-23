@@ -1,0 +1,5 @@
+{
+  "httpMethod": "POST",
+  "headers": {"origin": "http://localhost:5173"},
+  "body": "{\"orderId\":\"test-order-id-here\"}"
+}

@@ -109,10 +109,16 @@ const OrdersTab = ({ user }: { user: User }) => {
             {orders.map((order) => (
               <div key={order.id} className="border border-border rounded-lg p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {order.id.slice(0, 8)}
+                  <span className="text-xs text-muted-foreground">
+                    訂單編號 <span className="font-mono tracking-wide">{order.id.slice(0, 8).toUpperCase()}</span>
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    order.status === "paid" || order.status === "completed"
+                      ? "bg-green-100 text-green-700"
+                      : order.status === "cancelled"
+                      ? "bg-red-50 text-red-600"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
                     {statusMap[order.status] || order.status}
                   </span>
                 </div>

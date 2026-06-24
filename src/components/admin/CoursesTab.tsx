@@ -30,6 +30,7 @@ interface Course {
   published: boolean;
   sort_order: number;
   created_at: string;
+  access_days: number | null;
 }
 
 const slugify = (s: string) =>
@@ -39,7 +40,7 @@ const empty: Partial<Course> = {
   title: "", slug: "", course_type: "prerecorded", instructor: "Kaia（首席心理師）",
   cover_image: "", description: "", audience: [], modules: [],
   launch_label: "", cta_label: "上架通知我", live_badge: "", live_schedule: "",
-  published: false, sort_order: 0,
+  published: false, sort_order: 0, access_days: null,
 };
 
 const CoursesTab = () => {
@@ -74,6 +75,7 @@ const CoursesTab = () => {
       cta_label: editing.cta_label || "上架通知我",
       live_badge: editing.course_type === "live" ? (editing.live_badge || null) : null,
       live_schedule: editing.course_type === "live" ? (editing.live_schedule || null) : null,
+      access_days: editing.access_days ?? null,
       published: !!editing.published,
       sort_order: editing.sort_order ?? 0,
     };
@@ -193,14 +195,26 @@ const CoursesTab = () => {
                   <Input value={editing.title || ""} onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
                 </div>
 
+                <div>
+                  <Label>網址代稱（slug）</Label>
+                  <Input value={editing.slug || ""} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="留空自動生成" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>網址代稱（slug）</Label>
-                    <Input value={editing.slug || ""} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="留空自動生成" />
-                  </div>
                   <div>
                     <Label>排序（小到大）</Label>
                     <Input type="number" value={editing.sort_order ?? 0} onChange={(e) => setEditing({ ...editing, sort_order: parseInt(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label>觀看期限（天）</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={editing.access_days ?? ""}
+                      onChange={(e) => setEditing({ ...editing, access_days: e.target.value ? parseInt(e.target.value) : null })}
+                      placeholder="留空 = 永久"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">購買後幾天內可觀看，留空為永久買斷</p>
                   </div>
                 </div>
 

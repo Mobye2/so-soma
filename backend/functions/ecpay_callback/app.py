@@ -2,8 +2,8 @@ import json
 import os
 import hashlib
 import urllib.parse
-import uuid
 import boto3
+from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
 
 
@@ -16,35 +16,74 @@ def get_supabase_client() -> Client:
 
 
 def generate_check_mac_value(params: dict, hash_key: str, hash_iv: str) -> str:
-    """Generate ECPay CheckMacValue (SHA256)"""
     sorted_params = sorted(params.items(), key=lambda x: x[0].lower())
     raw = "&".join(f"{k}={v}" for k, v in sorted_params)
     raw = f"HashKey={hash_key}&{raw}&HashIV={hash_iv}"
-
     encoded = urllib.parse.quote_plus(raw).lower()
     for old, new in [("%2d", "-"), ("%5f", "_"), ("%2e", "."),
                      ("%21", "!"), ("%2a", "*"), ("%28", "("),
                      ("%29", ")"), ("%20", "+")]:
         encoded = encoded.replace(old, new)
-
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest().upper()
+
+
+def grant_course_access(supabase: Client, order_id: str):
+    """Grant course access based on order items after successful payment"""
+    order_data = supabase.table("orders").select(
+        "customer_email"
+    ).eq("id", order_id).single().execute().data
+    if not order_data:
+        return
+
+    profile = supabase.table("profiles").select("id").eq(
+        "email", order_data["customer_email"]
+    ).single().execute().data
+    if not profile:
+        print(f"No profile found for {order_data['customer_email']}")
+        return
+
+    user_id = profile["id"]
+
+    items = supabase.table("order_items").select(
+        "product_id"
+    ).eq("order_id", order_id).execute().data or []
+
+    for item in items:
+        product_id = item.get("product_id")
+        if not product_id:
+            continue
+        course = supabase.table("courses").select("id, access_days").eq(
+            "product_id", product_id
+        ).execute().data
+        if not course:
+            continue
+        course_id = course[0]["id"]
+        access_days = course[0].get("access_days")
+        expires_at = None
+        if access_days:
+            expires_at = (datetime.now(timezone.utc) + timedelta(days=access_days)).isoformat()
+
+        supabase.table("user_course_access").upsert({
+            "user_id": user_id,
+            "course_id": course_id,
+            "order_id": order_id,
+            "expires_at": expires_at,
+        }, on_conflict="user_id,course_id").execute()
+        print(f"Granted access: user={user_id} course={course_id} expires={expires_at}")
 
 
 def send_payment_success_email(supabase: Client, order_id: str):
     """Invoke send_transactional_email Lambda for payment success"""
-    order_result = supabase.table("orders").select(
+    order = supabase.table("orders").select(
         "customer_name, customer_email, total_amount"
-    ).eq("id", order_id).single().execute()
-    order = order_result.data
+    ).eq("id", order_id).single().execute().data
     if not order or not order.get("customer_email"):
         return
 
-    items_result = supabase.table("order_items").select(
+    items = supabase.table("order_items").select(
         "product_title, quantity, unit_price"
-    ).eq("order_id", order_id).execute()
-    items = items_result.data or []
+    ).eq("order_id", order_id).execute().data or []
 
-    # Invoke send email Lambda
     lambda_client = boto3.client("lambda")
     payload = {
         "httpMethod": "POST",
@@ -63,7 +102,7 @@ def send_payment_success_email(supabase: Client, order_id: str):
     }
     lambda_client.invoke(
         FunctionName=os.environ.get("SEND_EMAIL_FUNCTION_NAME", "solis-backend-SendTransactionalEmailFunction"),
-        InvocationType="Event",  # async
+        InvocationType="Event",
         Payload=json.dumps(payload),
     )
 
@@ -71,7 +110,6 @@ def send_payment_success_email(supabase: Client, order_id: str):
 def handler(event, context):
     """Handle ECPay payment callback (form-urlencoded POST)"""
     try:
-        # Parse form-urlencoded body
         body_str = event.get("body", "")
         if event.get("isBase64Encoded"):
             import base64
@@ -83,7 +121,6 @@ def handler(event, context):
         hash_key = os.environ.get("ECPAY_HASH_KEY", "").strip()
         hash_iv = os.environ.get("ECPAY_HASH_IV", "").strip()
 
-        # Verify CheckMacValue
         received_mac = params.pop("CheckMacValue", "")
         calculated_mac = generate_check_mac_value(params, hash_key, hash_iv)
 
@@ -92,7 +129,7 @@ def handler(event, context):
             return {"statusCode": 200, "body": "0|CheckMacValue Error"}
 
         order_id = params.get("CustomField1")
-        rtn_code = params.get("RtnCode")  # "1" = success
+        rtn_code = params.get("RtnCode")
 
         if not order_id:
             return {"statusCode": 200, "body": "0|Missing OrderId"}
@@ -107,8 +144,11 @@ def handler(event, context):
 
         print(f"Order {order_id} updated to {new_status}")
 
-        # Send confirmation email on successful payment
         if new_status == "paid":
+            try:
+                grant_course_access(supabase, order_id)
+            except Exception as e:
+                print(f"Grant course access failed: {e}")
             try:
                 send_payment_success_email(supabase, order_id)
             except Exception as e:

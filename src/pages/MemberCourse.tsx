@@ -44,7 +44,15 @@ const MemberCourse = () => {
         .eq("course_id", (c as Course).id).order("sort_order");
       const ch = (chRes.data as Chapter[]) || [];
       setChapters(ch);
-      setHasAccess(true);
+
+      // Check if user has purchased this course
+      const { data: access } = await supabase
+        .from("user_course_access")
+        .select("id")
+        .eq("user_id", user.sub)
+        .eq("course_id", (c as Course).id)
+        .maybeSingle();
+      setHasAccess(!!access);
       setActiveId(ch[0]?.id || null);
       setLoading(false);
     })();

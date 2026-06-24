@@ -25,6 +25,7 @@ const menuGroups: MenuGroup[] = [
   { label: "森林療癒", path: "/forest-therapy", simple: true },
   { label: "正念陰瑜珈", path: "/mindful-yin-yoga", simple: true },
   { label: "自我照顧", path: "/self-care", simple: true },
+  { label: "課程商店", path: "/shop", simple: true },
   { label: "部落格", path: "/blog", simple: true },
   { label: "會員課程", path: "/member-courses", simple: true },
 ];

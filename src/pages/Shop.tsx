@@ -1,6 +1,5 @@
 import Layout from "@/components/Layout";
 import SEO from "@/components/SEO";
-import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Leaf } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -118,7 +117,11 @@ const Shop = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map((product) => (
-                <div key={product.id} className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow">
+                <Link
+                  key={product.id}
+                  to={product.slug ? `/shop/${product.slug}` : "/shop"}
+                  className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow block"
+                >
                   <div className="h-44 bg-sage/10 overflow-hidden">
                     {productImageMap[product.id] || categoryFallbackImage[product.category] ? (
                       <img
@@ -139,20 +142,12 @@ const Shop = () => {
                     <span className="text-xs text-sage font-medium">{categoryLabels[product.category] || product.category}</span>
                     <h3 className="font-serif-tc text-base font-semibold text-foreground">{product.title}</h3>
                     {product.subtitle && <p className="text-xs text-muted-foreground">{product.subtitle}</p>}
-                    <div className="flex items-center justify-end pt-2">
-                      <Button
-                        asChild
-                        size="sm"
-                        variant="outline"
-                        className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground text-xs"
-                      >
-                        <Link to={`/contact?subject=${encodeURIComponent(`上架通知：${product.title}`)}`}>
-                          上架通知我
-                        </Link>
-                      </Button>
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-sm font-medium text-foreground">NT${product.price?.toLocaleString()}</span>
+                      <span className="text-xs text-secondary">了解更多 →</span>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

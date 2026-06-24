@@ -28,6 +28,7 @@ import Admin from "./pages/Admin.tsx";
 import Member from "./pages/Member.tsx";
 import MemberCourse from "./pages/MemberCourse.tsx";
 import MemberCourses from "./pages/MemberCourses.tsx";
+import ShopProduct from "./pages/ShopProduct.tsx";
 import Unsubscribe from "./pages/Unsubscribe.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -46,6 +47,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/about" element={<About />} />
             <Route path="/shop" element={<Shop />} />
+            <Route path="/shop/:slug" element={<ShopProduct />} />
             <Route path="/courses" element={<Courses />} />
             <Route path="/events" element={<Events />} />
             <Route path="/ebooks" element={<Ebooks />} />

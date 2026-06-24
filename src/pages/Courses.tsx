@@ -21,13 +21,7 @@ const StatusBadge = ({ label, tone = "soon" }: { label: string; tone?: StatusTon
   </span>
 );
 
-const SectionHeader = ({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) => (
+const SectionHeader = ({ title, description }: { title: string; description: string }) => (
   <div className="mb-8">
     <h2 className="font-serif-tc text-xl md:text-3xl font-semibold text-foreground mb-2 leading-snug break-keep">
       {title}
@@ -77,7 +71,6 @@ const Courses = () => {
             description="由 ANFT 國際森林療癒師親自引領。透過五感邀請、靜默漫步與自然冥想，在純粹的林間卸下數位焦慮，找回失落的專注與深層平靜。"
           />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 卡片一 */}
             <div className="bg-background border border-border rounded-2xl p-6 md:p-8 flex flex-col">
               <h3 className="font-serif-tc text-lg md:text-xl font-semibold text-foreground mb-3 leading-snug break-keep">
                 Green Prescription｜煦日森林半日沈浸體驗
@@ -98,7 +91,6 @@ const Courses = () => {
               </div>
             </div>
 
-            {/* 卡片二 */}
             <div className="bg-background border border-border rounded-2xl p-6 md:p-8 flex flex-col">
               <h3 className="font-serif-tc text-lg md:text-xl font-semibold text-foreground mb-3 leading-snug break-keep">
                 Solis Retreat｜兩天一夜山林療癒與深度修復之旅
@@ -122,7 +114,7 @@ const Courses = () => {
         </div>
       </section>
 
-      {/* 區塊二：認識自己，自我照顧 */}
+      {/* 區塊二：Somatic Practice */}
       <section className="section-padding bg-mist">
         <div className="container-brand max-w-6xl mx-auto">
           <SectionHeader
@@ -137,23 +129,15 @@ const Courses = () => {
                 className="min-w-[240px] md:min-w-0 snap-start bg-background border border-border rounded-2xl p-6 flex flex-col"
               >
                 <div className="text-3xl mb-3">{c.emoji}</div>
-                <h3 className="font-serif-tc text-lg font-semibold text-foreground mb-2">
-                  {c.title}
-                </h3>
-                <p className="text-sm text-muted-foreground mb-5 leading-relaxed flex-1">
-                  {c.desc}
-                </p>
-                <div className="space-y-3">
-                  <StatusBadge label="即將上架" />
-                  <Button asChild size="sm" variant="outline" className="w-full border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
-                    <a href={LINE_URL} target="_blank" rel="noopener noreferrer">訂閱通知</a>
-                  </Button>
-                </div>
+                <h3 className="font-serif-tc text-lg font-semibold text-foreground mb-2">{c.title}</h3>
+                <p className="text-sm text-muted-foreground mb-5 leading-relaxed flex-1">{c.desc}</p>
+                <Button asChild size="sm" className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90">
+                  <Link to="/shop/nervous-system-intro">了解更多 →</Link>
+                </Button>
               </div>
             ))}
           </div>
 
-          {/* Bundle banner */}
           <div className="mt-8 bg-sage/15 border border-sage/30 rounded-2xl p-6 md:p-8 text-center">
             <h3 className="font-serif-tc text-base md:text-2xl font-semibold text-foreground mb-4 leading-snug break-keep">
               Solis Bundle ｜ 任選三堂微型修復，享專屬組合優惠
@@ -168,7 +152,7 @@ const Courses = () => {
         </div>
       </section>
 
-      {/* 區塊三：認識自己 */}
+      {/* 區塊三：Inner Wisdom */}
       <section className="section-padding">
         <div className="container-brand max-w-5xl mx-auto">
           <SectionHeader
@@ -185,9 +169,8 @@ const Courses = () => {
               </p>
               <p className="text-xs text-muted-foreground mb-5">自學課程｜預錄隨選</p>
               <div className="mt-auto flex flex-wrap items-center gap-3">
-                <StatusBadge label="即將上架" />
-                <Button asChild size="sm" variant="outline" className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
-                  <a href={LINE_URL} target="_blank" rel="noopener noreferrer">訂閱通知</a>
+                <Button asChild size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+                  <Link to="/shop/nervous-system-intro">立即購買</Link>
                 </Button>
               </div>
             </div>
@@ -200,9 +183,8 @@ const Courses = () => {
               </p>
               <p className="text-xs text-muted-foreground mb-5">電子書｜隨時閱讀</p>
               <div className="mt-auto flex flex-wrap items-center gap-3">
-                <StatusBadge label="即將上架" />
-                <Button asChild size="sm" variant="outline" className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
-                  <a href={LINE_URL} target="_blank" rel="noopener noreferrer">訂閱通知</a>
+                <Button asChild size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+                  <Link to="/shop/nervous-system-ebook">立即購買</Link>
                 </Button>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,6 +38,7 @@ interface SubscribersTabProps {
 }
 
 const SubscribersTab = ({ defaultValue = "newsletter" }: SubscribersTabProps) => {
+  const { getIdToken } = useAuth();
   const [newsletter, setNewsletter] = useState<Newsletter[]>([]);
   const [launch, setLaunch] = useState<LaunchNotify[]>([]);
   const [quiz, setQuiz] = useState<QuizResult[]>([]);
@@ -44,14 +46,19 @@ const SubscribersTab = ({ defaultValue = "newsletter" }: SubscribersTabProps) =>
 
   useEffect(() => {
     const fetch = async () => {
-      const [n, l, q] = await Promise.all([
-        supabase.from("newsletter_subscribers").select("*").order("created_at", { ascending: false }),
-        supabase.from("launch_notify_subscribers").select("*").order("created_at", { ascending: false }),
-        supabase.from("quiz_results").select("*").order("created_at", { ascending: false }),
-      ]);
-      if (n.data) setNewsletter(n.data as Newsletter[]);
-      if (l.data) setLaunch(l.data as LaunchNotify[]);
-      if (q.data) setQuiz(q.data as QuizResult[]);
+      try {
+        const token = await getIdToken();
+        const [n, l, q] = await Promise.all([
+          apiPost("/admin-db", { method: "GET", table: "newsletter_subscribers?order=created_at.desc" }, token || undefined),
+          apiPost("/admin-db", { method: "GET", table: "launch_notify_subscribers?order=created_at.desc" }, token || undefined),
+          apiPost("/admin-db", { method: "GET", table: "quiz_results?order=created_at.desc" }, token || undefined),
+        ]);
+        if (n) setNewsletter(Array.isArray(n) ? n as Newsletter[] : []);
+        if (l) setLaunch(Array.isArray(l) ? l as LaunchNotify[] : []);
+        if (q) setQuiz(Array.isArray(q) ? q as QuizResult[] : []);
+      } catch (e) {
+        console.error("Failed to load subscribers:", e);
+      }
       setLoading(false);
     };
     fetch();

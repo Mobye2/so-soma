@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";  // Keep for functions.invoke
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +20,7 @@ const fmtPct = (n: number) => `${(n * 100).toFixed(2)}%`;
 const fmtPos = (n: number) => n.toFixed(1);
 
 const SEOMetricsTab = () => {
+  const { getIdToken } = useAuth();
   const [daily, setDaily] = useState<DailyRow[]>([]);
   const [pages, setPages] = useState<PageRow[]>([]);
   const [queries, setQueries] = useState<QueryRow[]>([]);
@@ -31,22 +34,29 @@ const SEOMetricsTab = () => {
     since.setDate(since.getDate() - 60);
     const sinceStr = since.toISOString().slice(0, 10);
 
-    const [d, p, q, l] = await Promise.all([
-      supabase.from("seo_daily_metrics").select("*").gte("date", sinceStr).order("date"),
-      supabase.from("seo_page_metrics").select("*").order("date", { ascending: false }).order("clicks", { ascending: false }).limit(200),
-      supabase.from("seo_query_metrics").select("*").order("date", { ascending: false }).order("clicks", { ascending: false }).limit(200),
-      supabase.from("seo_sync_log").select("*").order("synced_at", { ascending: false }).limit(1),
-    ]);
-    if (d.data) setDaily(d.data as DailyRow[]);
-    if (p.data) {
-      const latestDate = (p.data[0] as PageRow)?.date;
-      setPages((p.data as PageRow[]).filter((r) => r.date === latestDate));
+    try {
+      const token = await getIdToken();
+      const [d, p, q, l] = await Promise.all([
+        apiPost("/admin-db", { method: "GET", table: `seo_daily_metrics?date=gte.${sinceStr}&order=date` }, token || undefined),
+        apiPost("/admin-db", { method: "GET", table: "seo_page_metrics?order=date.desc,clicks.desc&limit=200" }, token || undefined),
+        apiPost("/admin-db", { method: "GET", table: "seo_query_metrics?order=date.desc,clicks.desc&limit=200" }, token || undefined),
+        apiPost("/admin-db", { method: "GET", table: "seo_sync_log?order=synced_at.desc&limit=1" }, token || undefined),
+      ]);
+      if (d) setDaily(Array.isArray(d) ? d as DailyRow[] : []);
+      if (p) {
+        const pArray = Array.isArray(p) ? p as PageRow[] : [];
+        const latestDate = pArray[0]?.date;
+        setPages(pArray.filter((r) => r.date === latestDate));
+      }
+      if (q) {
+        const qArray = Array.isArray(q) ? q as QueryRow[] : [];
+        const latestDate = qArray[0]?.date;
+        setQueries(qArray.filter((r) => r.date === latestDate));
+      }
+      if (l && Array.isArray(l) && l[0]) setLastSync(l[0] as SyncLog);
+    } catch (e) {
+      console.error("Failed to load SEO metrics:", e);
     }
-    if (q.data) {
-      const latestDate = (q.data[0] as QueryRow)?.date;
-      setQueries((q.data as QueryRow[]).filter((r) => r.date === latestDate));
-    }
-    if (l.data && l.data[0]) setLastSync(l.data[0] as SyncLog);
     setLoading(false);
   };
 

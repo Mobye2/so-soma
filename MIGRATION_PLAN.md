@@ -7,133 +7,124 @@
 
 ## 最終架構
 
-| 層次 | 技術 | 費用 |
-|------|------|------|
-| 前端 | Next.js (TypeScript) + S3 + CloudFront | $0 |
-| 後端 API | API Gateway + Lambda (Python) | $0 |
-| 資料庫 | Supabase Free (PostgreSQL) | $0 |
-| Auth | Amazon Cognito | $0 (5萬MAU免費) |
-| 影片/靜態檔案 | S3 + CloudFront Signed URL | $0 |
-| Email 發送 | Amazon SES | $0 (3000封/月免費) |
-| Email Queue | Amazon SQS | $0 |
-| 金流 | ECPay (不動) | - |
-| **總計** | | **$0/月** |
+| 層次 | 技術 | 費用 | 狀態 |
+|------|------|------|------|
+| 前端 | Vite React → Next.js + S3 + CloudFront | $0 | 🔄 Phase 7 |
+| 後端 API | API Gateway + Lambda (Python) | $0 | ✅ |
+| 資料庫 | Supabase Free (PostgreSQL) | $0 | ✅ |
+| Auth | Amazon Cognito | $0 | ✅ |
+| 影片/靜態檔案 | S3 + CloudFront Signed URL | $0 | 🔄 Phase 6 |
+| Email 發送 | Amazon SES | $0 | ✅（Sandbox） |
+| Email Queue | Amazon SQS | $0 | ✅ |
+| 金流 | ECPay | - | ✅ |
+| **總計** | | **$0/月** | |
 
 ---
 
-## 技術選型說明
+## 技術選型（實際）
 
-- **Lambda 語言**：Python，搭配 `supabase-py`、`boto3`
-- **資料庫連線**：supabase-py SDK（保留 RLS）
-- **前端框架**：Next.js（改善 SEO，對部落格和課程頁面有利）
-- **Auth**：Cognito 取代 Supabase Auth（全面遷移，重建會員系統）
-- **影片保護**：CloudFront Signed URL，防止非會員存取
-
----
-
-## Python 套件
-
-| 用途 | 套件 |
-|------|------|
-| AWS 全部服務 | `boto3` |
-| Supabase 連線 | `supabase-py` |
-| Cognito JWT 驗證 | `python-jose` |
-| Email template | `jinja2` |
-| HTTP 請求 | `requests` |
+- **Lambda 語言**：Python，純 `urllib` + `boto3`，無需 Layer
+- **資料庫連線**：Supabase REST API（urllib 直打）
+- **前端框架**：目前 Vite React，Phase 7 考慮換 Next.js
+- **Auth**：Cognito（已完成）
+- **Email Queue**：SQS 取代 Supabase pgmq
 
 ---
 
-## 現有 Functions 對應
+## Lambda 清單
 
-| 原 Supabase Edge Function | 新 Lambda (Python) | 說明 |
-|---------------------------|-------------------|------|
-| `create-order` | `create_order` | 邏輯直接移植 |
-| `ecpay-create-payment` | `ecpay_create_payment` | 邏輯直接移植 |
-| `ecpay-callback` | `ecpay_callback` | 邏輯直接移植 |
-| `send-transactional-email` | `send_transactional_email` | 換 SES |
-| `process-email-queue` | `process_email_queue` | pgmq 換 SQS |
-| `auth-email-hook` | `auth_email_hook` | 確認 Cognito 觸發方式 |
-| `notify-published-posts` | `notify_published_posts` | 邏輯直接移植 |
-| `handle-email-unsubscribe` | `handle_email_unsubscribe` | 邏輯直接移植 |
-| `handle-email-suppression` | `handle_email_suppression` | 邏輯直接移植 |
-| `sync-gsc-metrics` | `sync_gsc_metrics` | 邏輯直接移植 |
+| Lambda | 狀態 | 備註 |
+|--------|------|------|
+| `create_order` | ✅ 部署測試完成 | 使用 supabase-py layer |
+| `ecpay_create_payment` | ✅ 部署測試完成 | 使用 supabase-py layer |
+| `ecpay_callback` | ✅ 部署測試完成 | 使用 supabase-py layer |
+| `send_transactional_email` | ✅ 部署測試完成 | 已改 urllib，無 layer |
+| `handle_email_unsubscribe` | ✅ 部署測試完成 | 已改 urllib，無 layer |
+| `notify_published_posts` | ✅ 部署測試完成 | 已改 urllib，無 layer |
+| `process_email_queue` | ✅ 部署測試完成 | SQS trigger，無 layer |
+| `handle_email_suppression` | ⏳ 待啟用 | 等 SES 出 Sandbox，需 SNS Topic |
+| `auth_email_hook` | ⏳ 待啟用 | 等 Cognito KMS Key 設定 |
+| `sync_gsc_metrics` | ⏳ 待啟用 | 等網站上線、GSC service account |
 
 ---
 
 ## 遷移階段
 
-### Phase 1：Supabase 遷移
-- [ ] 開新 Supabase Free 帳號
-- [ ] 跑所有 migrations 建立 schema
-- [ ] 匯入 CSV 資料（23 張表）
-- [ ] 更新 `.env` 指向新 Supabase 專案
-- [ ] 確認 RLS policies 正常
+### Phase 1：Supabase 遷移 ✅
+- [x] 開新 Supabase Free 帳號
+- [x] 建立 schema（courses、products、orders、user_course_access 等）
+- [x] 更新 `.env` 指向新 Supabase 專案
+- [x] RLS policies 設定
 
-### Phase 2：Cognito 建立
-- [ ] 建立 Cognito User Pool
-- [ ] 設定 App Client
-- [ ] 設定 User Groups（admin、moderator、user）
-- [ ] 遷移現有用戶（profiles 表有 1 筆）
-- [ ] 重寫 `useAuth.tsx` → Cognito SDK
-- [ ] 重寫 `useAdminCheck.tsx` → Cognito Groups
+### Phase 2：Cognito 建立 ✅
+- [x] 建立 Cognito User Pool
+- [x] 設定 App Client
+- [x] 重寫 `useAuth.tsx` → Cognito SDK
+- [x] 會員註冊（含驗證碼流程）、登入、登出
 
-### Phase 3：Lambda 重建（Python）
-- [ ] 建立 Lambda 基礎架構（API Gateway）
-- [ ] 逐一移植 10 個 Functions
-- [ ] 設定環境變數（Supabase URL/Key、ECPay credentials）
-- [ ] 測試每個 Function
+### Phase 3：Lambda 重建 ✅
+- [x] 建立 SAM 基礎架構（API Gateway + Lambda）
+- [x] `create_order`
+- [x] `ecpay_create_payment`
+- [x] `ecpay_callback`
+- [x] `send_transactional_email`（已改 urllib）
+- [x] `handle_email_unsubscribe`（已改 urllib）
+- [x] `notify_published_posts`（已改 urllib）
+- [x] `process_email_queue`（SQS 取代 pgmq）
+- [x] `handle_email_suppression`（code 完成，待部署）
+- [x] `auth_email_hook`（code 完成，待部署）
+- [x] `sync_gsc_metrics`（code 完成，待部署）
 
-### Phase 4：Email 重建
-- [ ] 設定 SES，驗證寄件網域（`solisforest.com`）
-- [ ] 建立 SQS queue（取代 pgmq）
-- [ ] 重寫 email templates（Jinja2 取代 React Email）
-- [ ] 測試完整發信流程
+### Phase 4：Email ✅（部分）
+- [x] SES 網域驗證（solisforest.com）
+- [x] SQS queue 建立（取代 pgmq）
+- [x] 訂閱 / 退訂完整流程測試
+- [x] 所有 email template 實作
+- [ ] SES 申請移出 Sandbox（需官網上線）
+- [ ] handle_email_suppression 啟用（SNS Topic）
+- [ ] auth_email_hook 啟用（Cognito KMS）
 
-### Phase 5：前端重建
-- [ ] 建立 Next.js 專案
-- [ ] 搬移所有頁面（24 頁）
-- [ ] Auth 換 Cognito SDK（`@aws-amplify/auth` 或 `amazon-cognito-identity-js`）
-- [ ] 更新所有 API 呼叫（從 supabase.functions.invoke → fetch Lambda URL）
-- [ ] SEO meta tags 確認
+### Phase 5：前端 ✅（大部分）
+- [x] 所有頁面建好（首頁、課程、商店、部落格、會員、後台等）
+- [x] 購買流程（ECPay 金流）
+- [x] 課程解鎖（user_course_access）
+- [x] 後台課程管理
+- [x] 訂閱 / 退訂前端串接
+- [ ] `/shop/:slug` 商品詳細頁（待建）
 
-### Phase 6：影片功能
-- [ ] S3 bucket 建立（課程影片專用）
-- [ ] 上傳現有課程影片
-- [ ] Lambda 實作 CloudFront Signed URL 產生
-- [ ] 前端影片播放器整合
-- [ ] 更新 `course_chapters.video_url` 欄位
+### Phase 6：影片串流 ❌
+- [ ] S3 bucket 建立（課程影片）
+- [ ] CloudFront Signed URL
+- [ ] 前端播放器整合
 
-### Phase 7：部署上線
-- [ ] Next.js build → 上傳 S3
-- [ ] CloudFront distribution 設定
-- [ ] 自訂 domain 設定（`solisforest.com`）
-- [ ] ECPay callback URL 更新（指向新 Lambda）
-- [ ] 全功能測試
-- [ ] 確認後關閉 Lovable 訂閱
+### Phase 7：上線 ❌
+- [ ] 決定是否換 Next.js（目前 Vite React）
+- [ ] S3 + CloudFront 部署前端
+- [ ] 自訂 domain 設定（solisforest.com → Route 53）
+- [ ] ECPay callback URL 更新
+- [ ] SES 申請移出 Sandbox
+- [ ] handle_email_suppression 啟用
+- [ ] auth_email_hook 啟用
+- [ ] sync_gsc_metrics 啟用（GSC service account）
+- [ ] 上線前重新產生 Supabase Service Role Key（已曝光）
+- [ ] 全功能測試後關閉 Lovable
 
 ---
 
-## 現有資料庫資料量（遷移參考）
+## 待處理（近期）
 
-| 資料表 | 筆數 |
-|--------|------|
-| blog_posts | 12 |
-| courses | 4 |
-| course_chapters | 3 |
-| products | 7 |
-| profiles | 1 |
-| user_roles | 2 |
-| quiz_results | 30 |
-| email_send_log | 68 |
-| seo_daily_metrics | 55 |
-| seo_page_metrics | 140 |
-| 其他 | 少量 |
+| 項目 | 優先度 |
+|------|--------|
+| `/shop/:slug` 商品詳細頁 | 高 |
+| Phase 6 影片串流 | 中 |
+| SES 移出 Sandbox | 上線前必做 |
+| 換 Next.js 或繼續用 Vite | 需決定 |
 
 ---
 
 ## 注意事項
 
-1. **ECPay callback URL** 必須在 Phase 7 更新，否則付款會回到舊的 endpoint
-2. **`solisforest.com` DNS** 需要在 Phase 4 設定 SES 驗證，提前處理避免等待時間
-3. **Lovable 訂閱**不要急著關，等全部測試完再關
-4. **Cognito 遷移用戶**：現有用戶密碼無法遷移，需要讓用戶重設密碼
+1. `create_order`、`ecpay_create_payment`、`ecpay_callback` 還在用 supabase-py layer，上線前可考慮一併改成 urllib
+2. ECPay callback URL 在 Phase 7 更新
+3. Supabase Service Role Key 已曝光（GitHub history），上線前必須重新產生
+4. Lovable 訂閱不要急著關，等 Phase 7 全功能測試完再關

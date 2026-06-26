@@ -28,21 +28,15 @@ def generate_check_mac_value(params: dict, hash_key: str, hash_iv: str) -> str:
 
 
 def grant_course_access(supabase: Client, order_id: str):
-    """Grant course access based on order items after successful payment"""
-    order_data = supabase.table("orders").select(
-        "customer_email"
-    ).eq("id", order_id).single().execute().data
-    if not order_data:
+    result = supabase.table("orders").select(
+        "user_id"
+    ).eq("id", order_id).execute()
+    order_data = result.data[0] if result.data else None
+    if not order_data or not order_data.get("user_id"):
+        print(f"Order {order_id} has no user_id, skipping course access")
         return
 
-    profile = supabase.table("profiles").select("id").eq(
-        "email", order_data["customer_email"]
-    ).single().execute().data
-    if not profile:
-        print(f"No profile found for {order_data['customer_email']}")
-        return
-
-    user_id = profile["id"]
+    user_id = order_data["user_id"]
 
     items = supabase.table("order_items").select(
         "product_id"
@@ -110,13 +104,14 @@ def send_payment_success_email(supabase: Client, order_id: str):
 def handler(event, context):
     """Handle ECPay payment callback (form-urlencoded POST)"""
     try:
-        body_str = event.get("body", "")
+        body_str = event.get("body", "") or ""
         if event.get("isBase64Encoded"):
             import base64
             body_str = base64.b64decode(body_str).decode("utf-8")
 
-        params = dict(urllib.parse.parse_qsl(body_str))
-        print(f"ECPay callback: {json.dumps(params)}")
+        print(f"RAW BODY: {repr(body_str)}")
+        params = dict(urllib.parse.parse_qsl(body_str, keep_blank_values=True))
+        print(f"ECPay callback: {json.dumps(params, ensure_ascii=False)}")
 
         hash_key = os.environ.get("ECPAY_HASH_KEY", "").strip()
         hash_iv = os.environ.get("ECPAY_HASH_IV", "").strip()

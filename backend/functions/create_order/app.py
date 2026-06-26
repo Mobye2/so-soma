@@ -54,10 +54,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Parse request body
         body = json.loads(event.get('body', '{}'))
-        customer_name = body.get('customer_name', '').strip()
-        customer_email = body.get('customer_email', '').strip()
-        customer_phone = body.get('customer_phone', '').strip()
-        notes = body.get('notes', '').strip()
+        customer_name = (body.get('customer_name') or '').strip()
+        customer_email = (body.get('customer_email') or '').strip()
+        customer_phone = (body.get('customer_phone') or '').strip()
+        notes = (body.get('notes') or '').strip()
         items = body.get('items', [])
 
         # Basic validation
@@ -133,7 +133,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'customer_phone': customer_phone[:50] or None,
             'total_amount': total,
             'notes': notes[:2000] or None,
-            'payment_method': 'ecpay'
+            'payment_method': 'ecpay',
+            'user_id': body.get('user_id') or None,
         }
         
         supabase.table('orders').insert(order_data).execute()

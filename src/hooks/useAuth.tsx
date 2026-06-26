@@ -103,6 +103,16 @@ export const useAuth = () => {
     });
   };
 
+  const confirmSignUp = (email: string, code: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      cognitoUser.confirmRegistration(code, true, (err, result) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+  };
+
   const signOut = () => {
     const cognitoUser = userPool.getCurrentUser();
     cognitoUser?.signOut();
@@ -110,5 +120,5 @@ export const useAuth = () => {
     setProfile(null);
   };
 
-  return { user, profile, loading, signIn, signUp, signOut };
+  return { user, profile, loading, signIn, signUp, confirmSignUp, signOut };
 };

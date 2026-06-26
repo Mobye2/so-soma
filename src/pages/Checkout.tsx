@@ -34,6 +34,11 @@ const Checkout = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
+    if (!user?.sub) {
+      toast({ title: "請先登入會員再結帳", variant: "destructive" });
+      navigate("/auth");
+      return;
+    }
 
     trackBeginCheckout(items, totalAmount);
     setLoading(true);
@@ -52,6 +57,7 @@ const Checkout = () => {
           price: i.price,
           category: i.category,
         })),
+        user_id: user?.sub || null,
       }, token);
       const orderId = createData.orderId as string;
 
@@ -60,7 +66,7 @@ const Checkout = () => {
         await supabase.from("profiles").update({
           display_name: form.name,
           phone: form.phone,
-        }).eq("id", user.id);
+        }).eq("id", user.sub || user.id);
       }
 
       // Call ECPay payment function
@@ -94,6 +100,10 @@ const Checkout = () => {
   };
 
   const isLoggedIn = !!user;
+
+  useEffect(() => {
+    if (!authLoading && !user) navigate("/auth");
+  }, [authLoading, user, navigate]);
 
   return (
     <Layout>

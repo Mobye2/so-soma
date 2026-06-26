@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<body onload="document.getElementById('f').submit()">
+<form id="f" method="POST" action="https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5">
+<input type="hidden" name="MerchantID" value="2000132">
+<input type="hidden" name="MerchantTradeNo" value="TEST1782307128146">
+<input type="hidden" name="MerchantTradeDate" value="2026/06/24 13:18:48">
+<input type="hidden" name="PaymentType" value="aio">
+<input type="hidden" name="TotalAmount" value="10">
+<input type="hidden" name="TradeDesc" value="Test Order">
+<input type="hidden" name="ItemName" value="測試商品">
+<input type="hidden" name="ReturnURL" value="https://dhthoeib97.execute-api.ap-east-2.amazonaws.com/prod/ecpay-callback-test">
+<input type="hidden" name="OrderResultURL" value="https://www.solisforest.com/order-success?orderId=test-123">
+<input type="hidden" name="ChoosePayment" value="Credit">
+<input type="hidden" name="EncryptType" value="1">
+<input type="hidden" name="CustomField1" value="test-order-123">
+<input type="hidden" name="CheckMacValue" value="C90632A71AF7ED8049A53E5510BD956D1882242757090E9DC6BCF0573F3D3C41">
+</form>
+</body>
+</html>

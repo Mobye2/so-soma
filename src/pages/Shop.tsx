@@ -63,7 +63,23 @@ const Shop = () => {
         .eq("is_active", true)
         .order("sort_order");
       if (error) throw error;
-      return data;
+
+      // 補抓課程封面
+      const ids = (data || []).map((p) => p.id);
+      if (ids.length === 0) return data;
+      const { data: courseCovers } = await supabase
+        .from("courses")
+        .select("product_id, cover_image, slug")
+        .in("product_id", ids);
+      const coverMap: Record<string, { cover_image: string | null; slug: string }> = {};
+      (courseCovers || []).forEach((c) => {
+        if (c.product_id) coverMap[c.product_id] = { cover_image: c.cover_image, slug: c.slug };
+      });
+      return (data || []).map((p) => ({
+        ...p,
+        cover_image: coverMap[p.id]?.cover_image ?? null,
+        slug: p.slug || coverMap[p.id]?.slug || null,
+      }));
     },
   });
 
@@ -123,20 +139,16 @@ const Shop = () => {
                   className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow block"
                 >
                   <div className="h-44 bg-sage/10 overflow-hidden">
-                    {productImageMap[product.id] || categoryFallbackImage[product.category] ? (
-                      <img
-                        src={productImageMap[product.id] || categoryFallbackImage[product.category]}
-                        alt={product.title}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        width={640}
-                        height={352}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Leaf className="w-10 h-10 text-sage/30" />
-                      </div>
-                    )}
+                    {(() => {
+                      const imgSrc = (product as any).cover_image || productImageMap[product.id] || categoryFallbackImage[product.category];
+                      return imgSrc ? (
+                        <img src={imgSrc} alt={product.title} className="w-full h-full object-cover" loading="lazy" width={640} height={352} />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Leaf className="w-10 h-10 text-sage/30" />
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="p-5 space-y-2">
                     <span className="text-xs text-sage font-medium">{categoryLabels[product.category] || product.category}</span>

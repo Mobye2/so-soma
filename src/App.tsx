@@ -29,6 +29,7 @@ import Member from "./pages/Member.tsx";
 import MemberCourse from "./pages/MemberCourse.tsx";
 import MemberCourses from "./pages/MemberCourses.tsx";
 import ShopProduct from "./pages/ShopProduct.tsx";
+import ComingSoon from "./pages/ComingSoon.tsx";
 import Unsubscribe from "./pages/Unsubscribe.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/member" element={<Member />} />
             <Route path="/member-courses" element={<MemberCourses />} />
             <Route path="/member/courses/:slug" element={<MemberCourse />} />
+            <Route path="/coming-soon" element={<ComingSoon />} />
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

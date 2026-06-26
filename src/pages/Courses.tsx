@@ -12,9 +12,7 @@ type StatusTone = "soon" | "future";
 const StatusBadge = ({ label, tone = "soon" }: { label: string; tone?: StatusTone }) => (
   <span
     className={`inline-block text-xs font-medium px-3 py-1 rounded-full ${
-      tone === "future"
-        ? "bg-sage/20 text-secondary"
-        : "bg-secondary/10 text-secondary"
+      tone === "future" ? "bg-sage/20 text-secondary" : "bg-secondary/10 text-secondary"
     }`}
   >
     {label}
@@ -121,18 +119,14 @@ const Courses = () => {
             title="🧠Somatic Practice ｜ 專屬狀態的正念陰瑜珈引導"
             description="不需要任何柔軟度，只需要你願意為自己停下來。"
           />
-
           <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 snap-x snap-mandatory md:grid md:grid-cols-5 md:overflow-visible md:mx-0 md:px-0">
             {bodyPracticeCards.map((c) => (
-              <div
-                key={c.title}
-                className="min-w-[240px] md:min-w-0 snap-start bg-background border border-border rounded-2xl p-6 flex flex-col"
-              >
+              <div key={c.title} className="min-w-[240px] md:min-w-0 snap-start bg-background border border-border rounded-2xl p-6 flex flex-col">
                 <div className="text-3xl mb-3">{c.emoji}</div>
                 <h3 className="font-serif-tc text-lg font-semibold text-foreground mb-2">{c.title}</h3>
                 <p className="text-sm text-muted-foreground mb-5 leading-relaxed flex-1">{c.desc}</p>
-                <Button asChild size="sm" className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                  <Link to="/shop/nervous-system-intro">了解更多 →</Link>
+                <Button asChild size="sm" variant="outline" className="w-full border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
+                  <Link to="/coming-soon">了解更多 →</Link>
                 </Button>
               </div>
             ))}
@@ -168,9 +162,9 @@ const Courses = () => {
                 結合多迷走神經科學的居家調節指南。{"\n"}專為總是緊繃、深感慢性疲勞卻說不清為什麼的你設計，從科學解析到日常練習，預錄隨選，隨時隨地找回內在的煞車鍵。
               </p>
               <p className="text-xs text-muted-foreground mb-5">自學課程｜預錄隨選</p>
-              <div className="mt-auto flex flex-wrap items-center gap-3">
-                <Button asChild size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                  <Link to="/shop/nervous-system-intro">立即購買</Link>
+              <div className="mt-auto">
+                <Button asChild size="sm" variant="outline" className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
+                  <Link to="/shop/nervous-system-intro">了解更多 →</Link>
                 </Button>
               </div>
             </div>
@@ -182,9 +176,9 @@ const Courses = () => {
                 12 個章節的深度對話，帶你跳脫「不夠努力」的自我苛責。從神經科學的視角，重新溫柔擁抱並理解自己的身心防衛反應。
               </p>
               <p className="text-xs text-muted-foreground mb-5">電子書｜隨時閱讀</p>
-              <div className="mt-auto flex flex-wrap items-center gap-3">
-                <Button asChild size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
-                  <Link to="/shop/nervous-system-ebook">立即購買</Link>
+              <div className="mt-auto">
+                <Button asChild size="sm" variant="outline" className="border-secondary text-secondary hover:bg-secondary hover:text-secondary-foreground">
+                  <Link to="/shop/nervous-system-ebook">了解更多 →</Link>
                 </Button>
               </div>
             </div>

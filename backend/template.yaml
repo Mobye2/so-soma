@@ -99,6 +99,7 @@ Resources:
           ECPAY_HASH_KEY: !Ref EcpayHashKey
           ECPAY_HASH_IV: !Ref EcpayHashIV
           API_BASE_URL: !Ref ApiBaseUrl
+          SITE_URL: !Ref SiteUrl
       Events:
         Api:
           Type: Api
@@ -162,6 +163,10 @@ Parameters:
     Type: String
     Default: "https://dhthoeib97.execute-api.ap-east-2.amazonaws.com/prod"
     Description: API Gateway base URL
+  SiteUrl:
+    Type: String
+    Default: "https://www.solisforest.com"
+    Description: Frontend site URL for ECPay return redirect
 
 Outputs:
   ApiUrl:

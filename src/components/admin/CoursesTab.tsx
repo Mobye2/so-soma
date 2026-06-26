@@ -31,6 +31,11 @@ interface Course {
   sort_order: number;
   created_at: string;
   access_days: number | null;
+  product_id: string | null;
+  // 商品欄位（從 products 表載入）
+  price?: number | null;
+  shop_subtitle?: string | null;
+  is_active?: boolean;
 }
 
 const slugify = (s: string) =>
@@ -40,7 +45,8 @@ const empty: Partial<Course> = {
   title: "", slug: "", course_type: "prerecorded", instructor: "Kaia（首席心理師）",
   cover_image: "", description: "", audience: [], modules: [],
   launch_label: "", cta_label: "上架通知我", live_badge: "", live_schedule: "",
-  published: false, sort_order: 0, access_days: null,
+  published: false, sort_order: 0, access_days: null, product_id: null,
+  price: null, shop_subtitle: "", is_active: false,
 };
 
 const CoursesTab = () => {
@@ -53,18 +59,45 @@ const CoursesTab = () => {
   const load = async () => {
     setLoading(true);
     const { data } = await supabase.from("courses").select("*").order("sort_order").order("created_at", { ascending: false });
-    setCourses((data as Course[]) || []);
+    const courseList = (data as Course[]) || [];
+
+    // 載入關聯的 products 資料
+    const productIds = courseList.map((c) => c.product_id).filter(Boolean) as string[];
+    if (productIds.length > 0) {
+      const { data: products } = await supabase.from("products").select("id,price,subtitle,is_active").in("id", productIds);
+      courseList.forEach((c) => {
+        const p = (products || []).find((p) => p.id === c.product_id);
+        if (p) {
+          c.price = p.price;
+          c.shop_subtitle = p.subtitle;
+          c.is_active = p.is_active;
+        }
+      });
+    }
+    setCourses(courseList);
     setLoading(false);
   };
+
   useEffect(() => { load(); }, []);
+
+  const openEdit = async (c: Course) => {
+    const course = { ...c };
+    if (c.product_id) {
+      const { data: p } = await supabase.from("products").select("price,subtitle,is_active").eq("id", c.product_id).maybeSingle();
+      if (p) { course.price = p.price; course.shop_subtitle = p.subtitle; course.is_active = p.is_active; }
+    }
+    setEditing(course);
+  };
 
   const save = async () => {
     if (!editing) return;
     if (!editing.title?.trim()) return toast({ title: "請輸入課程名稱", variant: "destructive" });
     setSaving(true);
-    const payload = {
+
+    const courseSlug = editing.slug?.trim() || slugify(editing.title);
+    const coursePayload = {
       title: editing.title.trim(),
-      slug: editing.slug?.trim() || slugify(editing.title),
+      slug: courseSlug,
       course_type: editing.course_type || "prerecorded",
       instructor: editing.instructor || "Kaia（首席心理師）",
       cover_image: editing.cover_image || null,
@@ -79,11 +112,43 @@ const CoursesTab = () => {
       published: !!editing.published,
       sort_order: editing.sort_order ?? 0,
     };
-    const res = editing.id
-      ? await supabase.from("courses").update(payload).eq("id", editing.id)
-      : await supabase.from("courses").insert(payload);
+
+    let courseId = editing.id;
+
+    // 儲存課程
+    if (courseId) {
+      const { error } = await supabase.from("courses").update(coursePayload).eq("id", courseId);
+      if (error) { setSaving(false); return toast({ title: "儲存失敗", description: error.message, variant: "destructive" }); }
+    } else {
+      const { data, error } = await supabase.from("courses").insert(coursePayload).select("id").single();
+      if (error || !data) { setSaving(false); return toast({ title: "儲存失敗", description: error?.message, variant: "destructive" }); }
+      courseId = data.id;
+    }
+
+    // 同步 products 表：只要有價格或已有 product_id 就同步
+    const productPayload = {
+      title: editing.title.trim(),
+      subtitle: editing.shop_subtitle || null,
+      price: editing.price || 0,
+      currency: "TWD",
+      category: editing.course_type === "live" ? "live_class" : "online_course",
+      cta_label: "立即購買",
+      is_active: !!editing.is_active,
+      slug: courseSlug,
+    };
+
+    if (editing.product_id) {
+      await supabase.from("products").update(productPayload).eq("id", editing.product_id);
+    } else if (editing.price != null || editing.is_active) {
+      // 有設價格，或主動開上架，就建立 product
+      const { data: newProduct } = await supabase
+        .from("products").insert(productPayload).select("id").single();
+      if (newProduct) {
+        await supabase.from("courses").update({ product_id: newProduct.id }).eq("id", courseId);
+      }
+    }
+
     setSaving(false);
-    if (res.error) return toast({ title: "儲存失敗", description: res.error.message, variant: "destructive" });
     toast({ title: "已儲存" });
     setEditing(null);
     load();
@@ -141,8 +206,8 @@ const CoursesTab = () => {
                   <TableHead>排序</TableHead>
                   <TableHead>標題</TableHead>
                   <TableHead>類型</TableHead>
-                  <TableHead>上架狀態</TableHead>
-                  <TableHead>發布</TableHead>
+                  <TableHead>價格</TableHead>
+                  <TableHead>商店</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -150,16 +215,16 @@ const CoursesTab = () => {
                 {courses.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>{c.sort_order}</TableCell>
-                    <TableCell className="max-w-[280px] truncate">{c.title}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{c.title}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{c.course_type === "live" ? "即時課" : "自學課"}</Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{c.launch_label || "-"}</TableCell>
+                    <TableCell className="text-sm">{c.price ? `NT$${c.price.toLocaleString()}` : "-"}</TableCell>
                     <TableCell>
-                      <Badge variant={c.published ? "default" : "secondary"}>{c.published ? "已發布" : "未發布"}</Badge>
+                      <Badge variant={c.is_active ? "default" : "secondary"}>{c.is_active ? "上架中" : "未上架"}</Badge>
                     </TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(c)}><Pencil className="w-4 h-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></Button>
                       <Button size="sm" variant="ghost" onClick={() => remove(c.id)}><Trash2 className="w-4 h-4" /></Button>
                     </TableCell>
                   </TableRow>
@@ -207,20 +272,44 @@ const CoursesTab = () => {
                   </div>
                   <div>
                     <Label>觀看期限（天）</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={editing.access_days ?? ""}
+                    <Input type="number" min={1} value={editing.access_days ?? ""}
                       onChange={(e) => setEditing({ ...editing, access_days: e.target.value ? parseInt(e.target.value) : null })}
-                      placeholder="留空 = 永久"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">購買後幾天內可觀看，留空為永久買斷</p>
+                      placeholder="留空 = 永久" />
+                    <p className="text-xs text-muted-foreground mt-1">留空為永久買斷</p>
+                  </div>
+                </div>
+
+                {/* 商品區塊 */}
+                <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <p className="text-sm font-medium">商店設定</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label>售價（NT$）</Label>
+                      <Input type="number" min={0} value={editing.price ?? ""}
+                        onChange={(e) => setEditing({ ...editing, price: e.target.value ? parseInt(e.target.value) : null })}
+                        placeholder="輸入售價" />
+                    </div>
+                    <div>
+                      <Label>商店副標題</Label>
+                      <Input value={editing.shop_subtitle || ""}
+                        onChange={(e) => setEditing({ ...editing, shop_subtitle: e.target.value })}
+                        placeholder="例：自學課程｜預錄隨選" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={!!editing.is_active} onCheckedChange={(v) => setEditing({ ...editing, is_active: v })} />
+                    <Label>在商店上架顯示</Label>
                   </div>
                 </div>
 
                 <div>
                   <Label>講師</Label>
                   <Input value={editing.instructor || ""} onChange={(e) => setEditing({ ...editing, instructor: e.target.value })} />
+                </div>
+
+                <div>
+                  <Label>課程簡介</Label>
+                  <Textarea value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={3} />
                 </div>
 
                 <div>
@@ -238,22 +327,16 @@ const CoursesTab = () => {
                 </div>
 
                 {editing.course_type === "live" && (
-                  <>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <Label>簡介（即時課顯示）</Label>
-                      <Textarea value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={3} />
+                      <Label>即時課標籤</Label>
+                      <Input value={editing.live_badge || ""} onChange={(e) => setEditing({ ...editing, live_badge: e.target.value })} placeholder="例：每月方案" />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label>即時課標籤</Label>
-                        <Input value={editing.live_badge || ""} onChange={(e) => setEditing({ ...editing, live_badge: e.target.value })} placeholder="例：每月方案" />
-                      </div>
-                      <div>
-                        <Label>上課時段</Label>
-                        <Input value={editing.live_schedule || ""} onChange={(e) => setEditing({ ...editing, live_schedule: e.target.value })} placeholder="例：每週固定時段" />
-                      </div>
+                    <div>
+                      <Label>上課時段</Label>
+                      <Input value={editing.live_schedule || ""} onChange={(e) => setEditing({ ...editing, live_schedule: e.target.value })} placeholder="例：每週固定時段" />
                     </div>
-                  </>
+                  </div>
                 )}
 
                 <div>
@@ -303,11 +386,6 @@ const CoursesTab = () => {
                     <Label>按鈕文字</Label>
                     <Input value={editing.cta_label || ""} onChange={(e) => setEditing({ ...editing, cta_label: e.target.value })} placeholder="上架通知我" />
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2 border-t border-border/50">
-                  <Switch checked={!!editing.published} onCheckedChange={(v) => setEditing({ ...editing, published: v })} />
-                  <Label>於前台顯示</Label>
                 </div>
 
                 {editing.id && <ChapterManager courseId={editing.id} />}

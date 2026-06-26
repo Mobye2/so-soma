@@ -61,11 +61,12 @@ def handler(event, context):
         items_result = supabase.table("order_items").select("*").eq("order_id", order_id).execute()
         items = items_result.data or []
 
-        # Build item name
+        # Build item name - ECPay 限制：200字元，避免特殊符號
         if items:
-            item_names = "#".join(f"{i['product_title']} x{i['quantity']}" for i in items)
+            item_names = "#".join(i['product_title'][:40] for i in items)
         else:
-            item_names = "Event Registration"
+            item_names = "Online Order"
+        item_names = item_names[:200]
 
         merchant_id = os.environ.get("ECPAY_MERCHANT_ID", "").strip()
         hash_key = os.environ.get("ECPAY_HASH_KEY", "").strip()
@@ -78,9 +79,12 @@ def handler(event, context):
         merchant_trade_date = now.strftime("%Y/%m/%d %H:%M:%S")
         trade_no = f"SOL{int(time.time() * 1000)}"
 
-        # Get origin from headers for return URL
+        site_url = os.environ.get("SITE_URL", "https://www.solisforest.com")
         headers = event.get("headers", {})
-        site_url = headers.get("origin") or headers.get("Origin") or "https://www.solisforest.com"
+        origin = headers.get("origin") or headers.get("Origin") or ""
+        # 只接受 https 來源，避免被偽造
+        if origin.startswith("https://"):
+            site_url = origin
         api_base = os.environ.get("API_BASE_URL", "")
 
         params = {
@@ -96,6 +100,10 @@ def handler(event, context):
             "ChoosePayment": "Credit",
             "EncryptType": "1",
             "CustomField1": order_id,
+            "CustomField2": "",
+            "CustomField3": "",
+            "CustomField4": "",
+            "StoreID": "",
         }
 
         params["CheckMacValue"] = generate_check_mac_value(params, hash_key, hash_iv)
@@ -106,7 +114,7 @@ def handler(event, context):
             "notes": f"ECPay TradeNo: {trade_no}" + (f" | {notes}" if notes else "")
         }).eq("id", order_id).execute()
 
-        ecpay_url = "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5"
+        ecpay_url = os.environ.get("ECPAY_URL", "https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5")
 
         return _resp(200, {"paymentUrl": ecpay_url, "params": params})
 

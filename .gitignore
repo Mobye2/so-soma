@@ -9,6 +9,8 @@
 backend/layers/shared/python/
 backend/.aws-sam/
 backend/venv/
+backend/samconfig.toml
+samconfig.toml
 
 # Python
 __pycache__/

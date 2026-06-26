@@ -253,6 +253,305 @@ Resources:
               Action: kms:Decrypt
               Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${CognitoKmsKeyId}"
 
+  # ─── Phase 6: Video Streaming ───────────────────────────────────────────────
+
+  # S3: Raw upload bucket (private, lifecycle delete after 7 days)
+  VideoRawBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "solis-videos-raw-${AWS::AccountId}"
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteRawAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # S3: HLS output bucket (private, CloudFront OAC only)
+  VideoHlsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "solis-videos-hls-${AWS::AccountId}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET]
+            AllowedHeaders: ['*']
+            MaxAge: 86400
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # CloudFront OAC
+  VideoOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: solis-video-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # CloudFront cache policy: no cache for m3u8
+  VideoManifestCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: solis-hls-manifest
+        DefaultTTL: 0
+        MinTTL: 0
+        MaxTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: false
+          EnableAcceptEncodingBrotli: false
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  # CloudFront cache policy: cache ts segments 1 day
+  VideoSegmentCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: solis-hls-segment
+        DefaultTTL: 86400
+        MinTTL: 86400
+        MaxTTL: 86400
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: false
+          EnableAcceptEncodingBrotli: false
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+
+  # CloudFront Distribution
+  VideoDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Origins:
+          - Id: HlsBucketOrigin
+            DomainName: !GetAtt VideoHlsBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt VideoOAC.Id
+        DefaultCacheBehavior:
+          TargetOriginId: HlsBucketOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          TrustedKeyGroups:
+            - !Ref CfKeyGroupId
+          CachePolicyId: !Ref VideoSegmentCachePolicy
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+        CacheBehaviors:
+          - PathPattern: "*.m3u8"
+            TargetOriginId: HlsBucketOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            TrustedKeyGroups:
+              - !Ref CfKeyGroupId
+            CachePolicyId: !Ref VideoManifestCachePolicy
+            AllowedMethods: [GET, HEAD]
+            CachedMethods: [GET, HEAD]
+
+  # HLS bucket policy: allow CloudFront OAC
+  VideoHlsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref VideoHlsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${VideoHlsBucket}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${VideoDistribution}"
+
+  # IAM Role for Batch job container
+  BatchJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BatchJobPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${VideoRawBucket}/*"
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${VideoHlsBucket}"
+                  - !Sub "arn:aws:s3:::${VideoHlsBucket}/*"
+
+  # IAM Role for Fargate task execution
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # AWS Batch Compute Environment (Fargate)
+  BatchComputeEnv:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      Type: MANAGED
+      ComputeResources:
+        Type: FARGATE
+        MaxvCpus: 4
+        Subnets:
+          - !Ref BatchSubnetId
+        SecurityGroupIds:
+          - !Ref BatchSgId
+
+  # AWS Batch Job Queue
+  BatchJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref BatchComputeEnv
+      Priority: 1
+
+  # AWS Batch Job Definition (FFmpeg)
+  FfmpegJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      Type: container
+      PlatformCapabilities:
+        - FARGATE
+      ContainerProperties:
+        Image: !Ref FfmpegImageUri
+        JobRoleArn: !GetAtt BatchJobRole.Arn
+        ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+        NetworkConfiguration:
+          AssignPublicIp: ENABLED
+        ResourceRequirements:
+          - Type: VCPU
+            Value: "2"
+          - Type: MEMORY
+            Value: "4096"
+
+  # Lambda: trigger AWS Batch job on S3 upload (S3 notification set via setup-s3-notification.sh)
+  TriggerBatchFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/trigger_batch/
+      Handler: app.handler
+      Environment:
+        Variables:
+          JOB_QUEUE: !Ref BatchJobQueue
+          JOB_DEFINITION: !Ref FfmpegJobDefinition
+          HLS_BUCKET: !Ref VideoHlsBucket
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: batch:SubmitJob
+              Resource: "*"
+
+  # Lambda: issue CloudFront Signed Cookie
+  IssueCookieFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/issue_cookie/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          CF_DOMAIN: !GetAtt VideoDistribution.DomainName
+          CF_KEY_ID_SSM: /solis/cf_key_id
+          CF_PRIVATE_KEY_SSM: /solis/cf_private_key
+          COOKIE_TTL: "21600"
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/solis/cf_private_key"
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/solis/cf_key_id"
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /issue-cookie
+            Method: POST
+
+  # Lambda: upload presigned URL (points to raw bucket)
+  GetUploadPresignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/get_upload_presigned_url/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+          VIDEO_BUCKET: !Ref VideoRawBucket
+          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+          UPLOAD_URL_EXPIRES: "900"
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub "arn:aws:s3:::${VideoRawBucket}/*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /upload-url
+            Method: POST
+
 Parameters:
   SupabaseUrl:
     Type: String
@@ -264,37 +563,45 @@ Parameters:
   SesRegion:
     Type: String
     Default: ap-southeast-1
-    Description: AWS SES region (use a region where SES is available)
+    Description: AWS SES region
   EcpayMerchantId:
     Type: String
     Default: "3416478"
-    Description: ECPay Merchant ID
   EcpayHashKey:
     Type: String
     NoEcho: true
-    Default: "REMOVED"
-    Description: ECPay Hash Key
+    Default: "2uHS7ko5TkDNY2Ea"
   EcpayHashIV:
     Type: String
     NoEcho: true
-    Default: "REMOVED"
-    Description: ECPay Hash IV
+    Default: "hg65fQfi1xx27fky"
   ApiBaseUrl:
     Type: String
     Default: "https://dhthoeib97.execute-api.ap-east-2.amazonaws.com/prod"
-    Description: API Gateway base URL
   SiteUrl:
     Type: String
     Default: "https://www.solisforest.com"
-    Description: Frontend site URL for ECPay return redirect
   SesNotificationTopicArn:
     Type: String
     Default: ""
-    Description: SNS Topic ARN for SES bounce/complaint notifications
   CognitoKmsKeyId:
     Type: String
     Default: ""
-    Description: KMS Key ID used by Cognito Custom Email Sender
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID for JWT verification
+  CfKeyGroupId:
+    Type: String
+    Description: CloudFront Key Group ID for Signed Cookie
+  FfmpegImageUri:
+    Type: String
+    Description: ECR image URI for FFmpeg Batch job
+  BatchSubnetId:
+    Type: String
+    Description: Subnet ID for AWS Batch Fargate
+  BatchSgId:
+    Type: String
+    Description: Security Group ID for AWS Batch Fargate
 
 Outputs:
   ApiUrl:
@@ -303,3 +610,11 @@ Outputs:
     Value: !Ref EmailQueue
   EmailQueueArn:
     Value: !GetAtt EmailQueue.Arn
+  VideoRawBucketName:
+    Value: !Ref VideoRawBucket
+  VideoHlsBucketName:
+    Value: !Ref VideoHlsBucket
+  VideoDistributionDomain:
+    Value: !GetAtt VideoDistribution.DomainName
+  TriggerBatchFunctionArn:
+    Value: !GetAtt TriggerBatchFunction.Arn

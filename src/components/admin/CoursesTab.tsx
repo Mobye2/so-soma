@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";  // Keep for storage only
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +52,7 @@ const empty: Partial<Course> = {
 };
 
 const CoursesTab = () => {
+  const { getIdToken } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Course> | null>(null);
@@ -58,23 +61,34 @@ const CoursesTab = () => {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from("courses").select("*").order("sort_order").order("created_at", { ascending: false });
-    const courseList = (data as Course[]) || [];
+    try {
+      const token = await getIdToken();
+      const data = await apiPost("/admin-db", {
+        method: "GET",
+        table: "courses?order=sort_order,created_at.desc"
+      }, token || undefined);
+      const courseList = Array.isArray(data) ? data as Course[] : [];
 
-    // 載入關聯的 products 資料
-    const productIds = courseList.map((c) => c.product_id).filter(Boolean) as string[];
-    if (productIds.length > 0) {
-      const { data: products } = await supabase.from("products").select("id,price,subtitle,is_active").in("id", productIds);
-      courseList.forEach((c) => {
-        const p = (products || []).find((p) => p.id === c.product_id);
-        if (p) {
-          c.price = p.price;
-          c.shop_subtitle = p.subtitle;
-          c.is_active = p.is_active;
-        }
-      });
+      // 載入關聯的 products 資料
+      const productIds = courseList.map((c) => c.product_id).filter(Boolean) as string[];
+      if (productIds.length > 0) {
+        const products = await apiPost("/admin-db", {
+          method: "GET",
+          table: `products?id=in.(${productIds.join(",")})&select=id,price,subtitle,is_active`
+        }, token || undefined);
+        courseList.forEach((c) => {
+          const p = (Array.isArray(products) ? products : []).find((p: any) => p.id === c.product_id);
+          if (p) {
+            c.price = p.price;
+            c.shop_subtitle = p.subtitle;
+            c.is_active = p.is_active;
+          }
+        });
+      }
+      setCourses(courseList);
+    } catch (e) {
+      console.error("Failed to load courses:", e);
     }
-    setCourses(courseList);
     setLoading(false);
   };
 
@@ -83,8 +97,20 @@ const CoursesTab = () => {
   const openEdit = async (c: Course) => {
     const course = { ...c };
     if (c.product_id) {
-      const { data: p } = await supabase.from("products").select("price,subtitle,is_active").eq("id", c.product_id).maybeSingle();
-      if (p) { course.price = p.price; course.shop_subtitle = p.subtitle; course.is_active = p.is_active; }
+      try {
+        const token = await getIdToken();
+        const p = await apiPost("/admin-db", {
+          method: "GET",
+          table: `products?id=eq.${c.product_id}&select=price,subtitle,is_active&limit=1`
+        }, token || undefined);
+        if (p && Array.isArray(p) && p[0]) {
+          course.price = p[0].price;
+          course.shop_subtitle = p[0].subtitle;
+          course.is_active = p[0].is_active;
+        }
+      } catch (e) {
+        console.error("Failed to load product:", e);
+      }
     }
     setEditing(course);
   };
@@ -99,7 +125,7 @@ const CoursesTab = () => {
       title: editing.title.trim(),
       slug: courseSlug,
       course_type: editing.course_type || "prerecorded",
-      instructor: editing.instructor || "Kaia（首席心理師）",
+      instructor: editing.instructor || "女人迷野專業教練團隊",
       cover_image: editing.cover_image || null,
       description: editing.description || null,
       audience: (editing.audience || []).filter((a) => a.trim()),
@@ -115,51 +141,84 @@ const CoursesTab = () => {
 
     let courseId = editing.id;
 
-    // 儲存課程
-    if (courseId) {
-      const { error } = await supabase.from("courses").update(coursePayload).eq("id", courseId);
-      if (error) { setSaving(false); return toast({ title: "儲存失敗", description: error.message, variant: "destructive" }); }
-    } else {
-      const { data, error } = await supabase.from("courses").insert(coursePayload).select("id").single();
-      if (error || !data) { setSaving(false); return toast({ title: "儲存失敗", description: error?.message, variant: "destructive" }); }
-      courseId = data.id;
-    }
-
-    // 同步 products 表：只要有價格或已有 product_id 就同步
-    const productPayload = {
-      title: editing.title.trim(),
-      subtitle: editing.shop_subtitle || null,
-      price: editing.price || 0,
-      currency: "TWD",
-      category: editing.course_type === "live" ? "live_class" : "online_course",
-      cta_label: "立即購買",
-      is_active: !!editing.is_active,
-      slug: courseSlug,
-    };
-
-    if (editing.product_id) {
-      await supabase.from("products").update(productPayload).eq("id", editing.product_id);
-    } else if (editing.price != null || editing.is_active) {
-      // 有設價格，或主動開上架，就建立 product
-      const { data: newProduct } = await supabase
-        .from("products").insert(productPayload).select("id").single();
-      if (newProduct) {
-        await supabase.from("courses").update({ product_id: newProduct.id }).eq("id", courseId);
+    try {
+      const token = await getIdToken();
+      // 儲存課程
+      if (courseId) {
+        await apiPost("/admin-db", {
+          method: "PATCH",
+          table: "courses",
+          payload: coursePayload,
+          filters: { id: `eq.${courseId}` }
+        }, token || undefined);
+      } else {
+        const data = await apiPost("/admin-db", {
+          method: "POST",
+          table: "courses",
+          payload: coursePayload
+        }, token || undefined);
+        if (Array.isArray(data) && data[0]) courseId = data[0].id;
       }
-    }
 
+      // 同步 products 表：只要有價格或已有 product_id 就同步
+      const productPayload = {
+        title: editing.title.trim(),
+        subtitle: editing.shop_subtitle || null,
+        price: editing.price || 0,
+        currency: "TWD",
+        category: editing.course_type === "live" ? "live_class" : "online_course",
+        cta_label: "立即購買",
+        is_active: !!editing.is_active,
+        slug: courseSlug,
+      };
+
+      if (editing.product_id) {
+        await apiPost("/admin-db", {
+          method: "PATCH",
+          table: "products",
+          payload: productPayload,
+          filters: { id: `eq.${editing.product_id}` }
+        }, token || undefined);
+      } else if (editing.price != null || editing.is_active) {
+        // 有設價格，或主動開上架，就建立 product
+        const newProduct = await apiPost("/admin-db", {
+          method: "POST",
+          table: "products",
+          payload: productPayload
+        }, token || undefined);
+        if (newProduct && Array.isArray(newProduct) && newProduct[0]) {
+          await apiPost("/admin-db", {
+            method: "PATCH",
+            table: "courses",
+            payload: { product_id: newProduct[0].id },
+            filters: { id: `eq.${courseId}` }
+          }, token || undefined);
+        }
+      }
+
+      toast({ title: "已儲存" });
+      setEditing(null);
+      load();
+    } catch (error: any) {
+      toast({ title: "儲存失敗", description: error.message, variant: "destructive" });
+    }
     setSaving(false);
-    toast({ title: "已儲存" });
-    setEditing(null);
-    load();
   };
 
   const remove = async (id: string) => {
     if (!confirm("確定要刪除這堂課程？")) return;
-    const { error } = await supabase.from("courses").delete().eq("id", id);
-    if (error) return toast({ title: "刪除失敗", description: error.message, variant: "destructive" });
-    toast({ title: "已刪除" });
-    load();
+    try {
+      const token = await getIdToken();
+      await apiPost("/admin-db", {
+        method: "DELETE",
+        table: "courses",
+        filters: { id: `eq.${id}` }
+      }, token || undefined);
+      toast({ title: "已刪除" });
+      load();
+    } catch (error: any) {
+      toast({ title: "刪除失敗", description: error.message, variant: "destructive" });
+    }
   };
 
   const uploadCover = async (file: File) => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ interface Enrollment {
 interface Course { id: string; title: string; slug: string; }
 
 const CourseEnrollmentsTab = () => {
+  const { getIdToken } = useAuth();
   const [list, setList] = useState<Enrollment[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [email, setEmail] = useState("");
@@ -30,21 +32,28 @@ const CourseEnrollmentsTab = () => {
 
   const load = async () => {
     setLoading(true);
-    const [enrRes, courseRes] = await Promise.all([
-      supabase.from("course_enrollments").select("*").order("granted_at", { ascending: false }),
-      supabase.from("courses").select("id,title,slug").order("sort_order"),
-    ]);
-    const enrollments = (enrRes.data as Enrollment[]) || [];
-    const userIds = [...new Set(enrollments.map((e) => e.user_id))];
-    const courseIds = [...new Set(enrollments.map((e) => e.course_id))];
-    const [profiles, coursesData] = await Promise.all([
-      userIds.length ? supabase.from("profiles").select("id,email,display_name").in("id", userIds) : Promise.resolve({ data: [] }),
-      courseIds.length ? supabase.from("courses").select("id,title,slug").in("id", courseIds) : Promise.resolve({ data: [] }),
-    ]);
-    const pMap = new Map((profiles.data || []).map((p: any) => [p.id, p]));
-    const cMap = new Map(((coursesData as any).data || []).map((c: any) => [c.id, c]));
-    setList(enrollments.map((e) => ({ ...e, profile: pMap.get(e.user_id) as any, course: cMap.get(e.course_id) as any })));
-    setCourses((courseRes.data as Course[]) || []);
+    try {
+      const token = await getIdToken();
+      const [enrollments, coursesData] = await Promise.all([
+        apiPost("/admin-db", { method: "GET", table: "course_enrollments?order=granted_at.desc" }, token || undefined),
+        apiPost("/admin-db", { method: "GET", table: "courses?order=sort_order&select=id,title,slug" }, token || undefined),
+      ]);
+      const enrList = Array.isArray(enrollments) ? enrollments as Enrollment[] : [];
+      const userIds = [...new Set(enrList.map((e: Enrollment) => e.user_id))];
+      const courseIds = [...new Set(enrList.map((e: Enrollment) => e.course_id))];
+      
+      const [profiles, coursesDetail] = await Promise.all([
+        userIds.length ? apiPost("/admin-db", { method: "GET", table: `profiles?id=in.(${userIds.join(",")})&select=id,email,display_name` }, token || undefined) : Promise.resolve([]),
+        courseIds.length ? apiPost("/admin-db", { method: "GET", table: `courses?id=in.(${courseIds.join(",")})&select=id,title,slug` }, token || undefined) : Promise.resolve([]),
+      ]);
+      
+      const pMap = new Map((Array.isArray(profiles) ? profiles : []).map((p: any) => [p.id, p]));
+      const cMap = new Map((Array.isArray(coursesDetail) ? coursesDetail : []).map((c: any) => [c.id, c]));
+      setList(enrList.map((e) => ({ ...e, profile: pMap.get(e.user_id) as any, course: cMap.get(e.course_id) as any })));
+      setCourses(Array.isArray(coursesData) ? coursesData as Course[] : []);
+    } catch (e) {
+      console.error("Failed to load enrollments:", e);
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -52,27 +61,47 @@ const CourseEnrollmentsTab = () => {
   const grant = async () => {
     if (!email.trim() || !courseId) return toast({ title: "請填寫 Email 與選擇課程", variant: "destructive" });
     setSaving(true);
-    const { data: prof, error: pErr } = await supabase.from("profiles").select("id").eq("email", email.trim().toLowerCase()).maybeSingle();
-    if (pErr || !prof) {
-      setSaving(false);
-      return toast({ title: "找不到此會員", description: "請確認該 Email 已註冊", variant: "destructive" });
+    try {
+      const token = await getIdToken();
+      const prof = await apiPost("/admin-db", {
+        method: "GET",
+        table: `profiles?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id&limit=1`
+      }, token || undefined);
+      
+      if (!prof || !Array.isArray(prof) || prof.length === 0) {
+        setSaving(false);
+        return toast({ title: "找不到此會員", description: "請確認該 Email 已註冊", variant: "destructive" });
+      }
+      
+      await apiPost("/admin-db", {
+        method: "POST",
+        table: "course_enrollments",
+        payload: { user_id: prof[0].id, course_id: courseId, source: "manual" }
+      }, token || undefined);
+      
+      toast({ title: "授權成功" });
+      setEmail(""); setCourseId("");
+      load();
+    } catch (error: any) {
+      toast({ title: "授權失敗", description: error.message, variant: "destructive" });
     }
-    const { error } = await supabase.from("course_enrollments").insert({
-      user_id: prof.id, course_id: courseId, source: "manual",
-    });
     setSaving(false);
-    if (error) return toast({ title: "授權失敗", description: error.message, variant: "destructive" });
-    toast({ title: "授權成功" });
-    setEmail(""); setCourseId("");
-    load();
   };
 
   const revoke = async (id: string) => {
     if (!confirm("確定撤銷此授權？")) return;
-    const { error } = await supabase.from("course_enrollments").delete().eq("id", id);
-    if (error) return toast({ title: "撤銷失敗", description: error.message, variant: "destructive" });
-    toast({ title: "已撤銷" });
-    load();
+    try {
+      const token = await getIdToken();
+      await apiPost("/admin-db", {
+        method: "DELETE",
+        table: "course_enrollments",
+        filters: { id: `eq.${id}` }
+      }, token || undefined);
+      toast({ title: "已撤銷" });
+      load();
+    } catch (error: any) {
+      toast({ title: "撤銷失敗", description: error.message, variant: "destructive" });
+    }
   };
 
   return (

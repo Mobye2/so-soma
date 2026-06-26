@@ -29,6 +29,7 @@ export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingCognitoUser, setPendingCognitoUser] = useState<CognitoUser | null>(null);
 
   useEffect(() => {
     const cognitoUser = userPool.getCurrentUser();
@@ -77,6 +78,32 @@ export const useAuth = () => {
           resolve();
         },
         onFailure: (err) => reject(err),
+        newPasswordRequired: (_userAttributes, _requiredAttributes) => {
+          setPendingCognitoUser(cognitoUser);
+          reject({ code: "NewPasswordRequired" });
+        },
+      });
+    });
+  };
+
+  const completeNewPassword = (newPassword: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (!pendingCognitoUser) return reject(new Error("No pending user"));
+      pendingCognitoUser.completeNewPasswordChallenge(newPassword, {}, {
+        onSuccess: async (session) => {
+          const payload = session.getIdToken().decodePayload();
+          const currentUser = { email: payload.email, sub: payload.sub };
+          setUser(currentUser);
+          const { data } = await supabase
+            .from("profiles")
+            .select("display_name, phone, email")
+            .eq("id", currentUser.sub)
+            .single();
+          setProfile(data);
+          setPendingCognitoUser(null);
+          resolve();
+        },
+        onFailure: (err) => reject(err),
       });
     });
   };
@@ -113,6 +140,26 @@ export const useAuth = () => {
     });
   };
 
+  const forgotPassword = (email: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      cognitoUser.forgotPassword({
+        onSuccess: () => resolve(),
+        onFailure: (err) => reject(err),
+      });
+    });
+  };
+
+  const confirmForgotPassword = (email: string, code: string, newPassword: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      cognitoUser.confirmPassword(code, newPassword, {
+        onSuccess: () => resolve(),
+        onFailure: (err) => reject(err),
+      });
+    });
+  };
+
   const signOut = () => {
     const cognitoUser = userPool.getCurrentUser();
     cognitoUser?.signOut();
@@ -120,5 +167,16 @@ export const useAuth = () => {
     setProfile(null);
   };
 
-  return { user, profile, loading, signIn, signUp, confirmSignUp, signOut };
+  const getIdToken = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const cognitoUser = userPool.getCurrentUser();
+      if (!cognitoUser) return resolve(null);
+      cognitoUser.getSession((err: Error | null, session: any) => {
+        if (err || !session?.isValid()) return resolve(null);
+        resolve(session.getIdToken().getJwtToken());
+      });
+    });
+  };
+
+  return { user, profile, loading, signIn, signUp, confirmSignUp, signOut, completeNewPassword, needsNewPassword: !!pendingCognitoUser, forgotPassword, confirmForgotPassword, getIdToken };
 };

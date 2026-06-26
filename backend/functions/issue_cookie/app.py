@@ -61,7 +61,7 @@ def verify_cognito_token(token):
 
     try:
         from jose import jwt as jose_jwt
-        payload = jose_jwt.decode(token, key_data, algorithms=["RS256"], audience=None)
+        payload = jose_jwt.decode(token, key_data, algorithms=["RS256"], options={"verify_aud": False})
     except ImportError:
         payload = json.loads(b64_decode(parts[1]))
 
@@ -174,8 +174,17 @@ def handler(event, context):
     except Exception as e:
         return cors(500, {"error": f"Cookie signing failed: {e}"})
 
+    # Generate signed URL with query parameters instead of cookies for better CORS support
+    # CloudFront supports both Signed Cookies and Signed URL query parameters
+    policy_b64 = cookies["CloudFront-Policy"]
+    sig_b64 = cookies["CloudFront-Signature"]
+    key_pair_id = cookies["CloudFront-Key-Pair-Id"]
+    
+    # Append query parameters to HLS URL
+    hls_url_with_params = f"{hls_url}?Policy={policy_b64}&Signature={sig_b64}&Key-Pair-Id={key_pair_id}"
+
     return cors(200, {
-        "hls_url": hls_url,
-        "cookies": cookies,
+        "hls_url": hls_url_with_params,
+        "cookies": cookies,  # Still return for cookie-based access if needed
         "expires": expires,
     })

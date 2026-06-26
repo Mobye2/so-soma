@@ -13,7 +13,7 @@
 | 後端 API | API Gateway + Lambda (Python) | $0 | ✅ |
 | 資料庫 | Supabase Free (PostgreSQL) | $0 | ✅ |
 | Auth | Amazon Cognito | $0 | ✅ |
-| 影片/靜態檔案 | S3 + CloudFront Signed URL | $0 | 🔄 Phase 6 |
+| 影片串流 | S3 + CloudFront Signed Cookie + Batch FFmpeg | $0 | 🔄 Phase 6 後端✅ 前端待做 |
 | Email 發送 | Amazon SES | $0 | ✅（Sandbox） |
 | Email Queue | Amazon SQS | $0 | ✅ |
 | 金流 | ECPay | - | ✅ |
@@ -92,10 +92,19 @@
 - [x] 訂閱 / 退訂前端串接
 - [ ] `/shop/:slug` 商品詳細頁（待建）
 
-### Phase 6：影片串流 ❌
-- [ ] S3 bucket 建立（課程影片）
-- [ ] CloudFront Signed URL
-- [ ] 前端播放器整合
+### Phase 6：影片串流 🔄（後端完成，前端待做）
+- [x] S3 raw bucket（`solis-videos-raw-836923176646`）
+- [x] S3 HLS bucket（`solis-videos-hls-836923176646`）
+- [x] CloudFront Distribution + OAC（`d6hezkk15hu6r.cloudfront.net`）
+- [x] CloudFront Signed Cookie（RSA key pair → SSM）
+- [x] AWS Batch Fargate + FFmpeg container（ECR: `solis-ffmpeg-hls`）
+- [x] Lambda: `trigger_batch`（S3 event → Batch job）
+- [x] Lambda: `issue_cookie`（JWT 驗證 → Signed Cookie）
+- [x] Lambda: `get_upload_presigned_url`（admin 上傳 → raw bucket）
+- [x] 端對端轉檔測試通過（上傳 → FFmpeg HLS → S3）
+- [ ] Supabase migration：`course_chapters` 加 `hls_ready` 欄位
+- [ ] 前端 `MemberCourse.tsx`：改用 `/issue-cookie` + HLS.js 播放器
+- [ ] 後台 `ChapterManager`：上傳狀態顯示（hls_ready 進度）
 
 ### Phase 7：上線 ❌
 - [ ] 決定是否換 Next.js（目前 Vite React）
@@ -116,7 +125,8 @@
 | 項目 | 優先度 |
 |------|--------|
 | `/shop/:slug` 商品詳細頁 | 高 |
-| Phase 6 影片串流 | 中 |
+| Phase 6 前端播放器串接 | 高 |
+| Supabase migration（hls_ready 欄位） | 高 |
 | SES 移出 Sandbox | 上線前必做 |
 | 換 Next.js 或繼續用 Vite | 需決定 |
 

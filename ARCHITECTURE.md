@@ -163,6 +163,73 @@
 
 ---
 
+## 安全性原則
+
+### Key 管理規則
+
+| Key 類型 | 存放位置 | 說明 |
+|----------|----------|------|
+| Supabase anon key | 前端 `VITE_SUPABASE_PUBLISHABLE_KEY` | 公開設計，權限由 RLS 控制 |
+| Supabase service role key | Lambda 環境變數（SAM） | 繞過 RLS，絕對不能放前端 |
+| Cognito JWT | 登入後存記憶體，隨請求帶入 | 呼叫 Lambda 時放 `Authorization: Bearer` |
+| CloudFront private key | SSM Parameter Store（SecureString） | 影片簽章用，Lambda 執行時才讀取 |
+| AWS credentials | 不存任何地方 | Lambda 用 IAM Role，本地用 AWS CLI profile |
+
+**原則：任何以 `VITE_` 開頭的變數都會打包進前端 bundle，等同公開。只有 anon key 可以放。**
+
+---
+
+### Supabase RLS 設計原則
+
+**判斷依據：誰需要讀這份資料？**
+
+| 類型 | 做法 | 範例 |
+|------|------|------|
+| 完全公開內容 | anon 可讀，建 SELECT policy `using (true)` 或條件 | `courses`、`course_chapters`、`blog_posts` |
+| 個人資料 | RLS 開啟，不建任何 anon policy，走 Lambda service key | `profiles`、`orders`、`course_enrollments` |
+| 寫入操作 | 全部走 Lambda，前端不直接寫敏感表 | 課程管理、付款回呼 |
+| 後台系統表 | RLS 開啟，不建任何 policy | `email_send_log`、`user_roles`、`seo_*` |
+
+**service role key 不受 RLS 限制，所以 Lambda 永遠能存取所有表。**
+
+---
+
+### 各表 RLS 狀態
+
+| 表 | RLS | anon 可讀 | 說明 |
+|----|-----|-----------|------|
+| `courses` | ✅ | ✅ published only | 公開課程介紹 |
+| `course_chapters` | ✅ | ✅ | 章節列表公開，影片靠 CloudFront Cookie 保護 |
+| `blog_posts` | ✅ | ✅ published only | 公開文章 |
+| `products` | ✅ | ✅ is_active only | 公開商品 |
+| `profiles` | ✅ | ❌ | 用戶個資 |
+| `orders` | ✅ | ❌ | 訂單資料 |
+| `order_items` | ✅ | ❌ | 訂單明細 |
+| `course_enrollments` | ✅ | ❌ | 課程購買紀錄 |
+| `user_roles` | ✅ | ❌ | 權限資料 |
+| `quiz_results` | ✅ | ❌ | 健康測驗個資 |
+| `email_send_log` | ✅ | ❌ | 後台系統 |
+| `suppressed_emails` | ✅ | ❌ | 後台系統 |
+| `seo_*` | ✅ | ❌ | 後台分析 |
+| `newsletter_subscribers` | ✅ | anon 可寫 | 訂閱表單 |
+| `contact_messages` | ✅ | anon 可寫 | 聯絡表單 |
+
+---
+
+### 前端存取資料的分工
+
+```
+前端 supabase client（anon key）
+  └── 只查公開內容：courses、course_chapters、blog_posts、products
+
+前端 → Lambda（帶 Cognito JWT）
+  └── 所有涉及個人資料的查詢：course_enrollments、profiles
+  └── 所有寫入操作：訂單、課程管理、影片上傳
+  └── 影片播放：CloudFront Signed Cookie
+```
+
+---
+
 ## 待處理事項
 
 | 項目 | 條件 | 優先度 |

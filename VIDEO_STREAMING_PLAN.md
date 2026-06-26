@@ -18,9 +18,9 @@ Admin 後台
 User 登入 → Cognito JWT
   → POST /issue-cookie (Lambda: issue_cookie)
   → 驗 JWT + 查 user_course_access
-  → 核發 CloudFront Signed Cookie（有效 6 小時）
-  → 前端 HLS.js 播放器打 CloudFront URL
-  → CloudFront 驗 Signed Cookie → OAC 轉發 → S3 HLS bucket
+  → 核發 CloudFront Signed URL（query parameters，有效 6 小時）
+  → 前端 HLS.js 播放器打 CloudFront URL（帶簽名參數）
+  → CloudFront 驗 Signed URL → OAC 轉發 → S3 HLS bucket
   → .m3u8 manifest + .ts segments 回傳給播放器
 ```
 
@@ -39,7 +39,7 @@ User 登入 → Cognito JWT
 
 - **Distribution**：Origin 指向 HLS bucket，透過 OAC 存取
 - **OAC**（Origin Access Control）：取代舊式 OAI
-- **Key Group + Public Key**：用於 Signed Cookie 驗證
+- **Key Group + Public Key**：用於 Signed URL 驗證
 - **Cache Policy**：`.m3u8` 不快取（TTL=0），`.ts` 快取 1 天
 
 ### AWS Batch
@@ -272,20 +272,19 @@ Headers: Authorization: Bearer <Cognito JWT>
 
 流程：
 1. verify_cognito_token(token) → user_id
-2. 查 course_chapters → chapter.course_id, is_preview
+2. 查 course_chapters → chapter.course_id, is_preview, hls_ready
 3. 若非 preview → 查 user_course_access，無則 403
 4. 從 SSM 取 cf_private_key + cf_key_id
-5. 用 rsa + sha1 簽名產生 CloudFront Signed Cookie
-   - CloudFront-Policy（resource: https://{cf_domain}/courses/{course_id}/{chapter_id}/*）
-   - CloudFront-Signature
-   - CloudFront-Key-Pair-Id
+5. 用 RSA SHA1 簽名產生 CloudFront Signed URL parameters
+   - Policy（resource: https://{cf_domain}/courses/{course_id}/{chapter_id}/*）
+   - Signature
+   - Key-Pair-Id
 6. 回傳：
    {
-     "hls_url": "https://{cf_domain}/courses/{course_id}/{chapter_id}/index.m3u8",
-     "cookies": { "CloudFront-Policy": "...", "CloudFront-Signature": "...", "CloudFront-Key-Pair-Id": "..." }
+     "hls_url": "https://{cf_domain}/courses/{course_id}/{chapter_id}/index.m3u8?Policy=...&Signature=...&Key-Pair-Id=..."
    }
 
-前端把 cookies 寫入 document.cookie，HLS.js 自動帶上
+前端 HLS.js xhrSetup 自動將簽名參數附加到所有子資源請求
 ```
 
 ### docker/ffmpeg/entrypoint.sh
@@ -322,12 +321,22 @@ curl -X PATCH "$SUPABASE_URL/rest/v1/course_chapters?id=eq.$CHAPTER_ID" \
 ```
 播放前流程：
 1. POST /issue-cookie { chapter_id } + JWT
-2. 收到 hls_url + cookies
-3. 把三個 CloudFront-* cookie 寫入 document.cookie
-   （domain=.solisforest.com, path=/, secure, samesite=strict）
-4. HLS.js 初始化，src = hls_url
-   HLS.js 請求 .m3u8 時瀏覽器自動帶上 cookie
-5. Cookie 6 小時後過期，播放時若 403 就重新呼叫 /issue-cookie
+2. 收到 hls_url（已含 Policy/Signature/Key-Pair-Id query parameters）
+3. 從 hls_url 提取簽名參數
+4. HLS.js 初始化，設定 xhrSetup 攔截所有請求
+5. xhrSetup 自動將簽名參數附加到所有子資源（.m3u8, .ts）
+6. Signed URL 6 小時後過期，播放時若 403 就重新呼叫 /issue-cookie
+
+HLS.js 設定範例：
+new Hls({
+  xhrSetup: (xhr, url) => {
+    const segmentUrl = new URL(url);
+    segmentUrl.searchParams.set('Policy', policy);
+    segmentUrl.searchParams.set('Signature', signature);
+    segmentUrl.searchParams.set('Key-Pair-Id', keyPairId);
+    xhr.open('GET', segmentUrl.toString(), true);
+  }
+});
 ```
 
 ---
@@ -356,12 +365,13 @@ ALTER TABLE course_chapters ADD COLUMN hls_ready boolean DEFAULT false;
 
 ## 實作順序
 
-1. **Docker image**：寫 Dockerfile + entrypoint.sh，build + push 到 ECR
-2. **手動前置**：產生 RSA key pair，上傳到 CloudFront + SSM
-3. **SAM template**：加入所有資源，`sam deploy`
-4. **Lambda: trigger_batch**：實作並測試
-5. **Lambda: issue_cookie**：實作並測試
-6. **前端 MemberCourse.tsx**：改用 /issue-cookie + HLS.js
-7. **後台 ChapterManager**：上傳改指向 raw bucket（已完成）
-8. **Supabase migration**：加 `hls_ready` 欄位
-9. **端對端測試**：上傳 → 轉檔 → 播放
+1. **Docker image** ✅：Dockerfile + entrypoint.sh，build + push 到 ECR (`solis-ffmpeg-hls`)
+2. **手動前置** ✅：RSA key pair → SSM (`/solis/cf_private_key`, `/solis/cf_key_id`)，CloudFront Key Group (`f487bba4`)
+3. **SAM template** ✅：所有資源部署完成
+4. **Lambda: trigger_batch** ✅：實作並測試通過
+5. **Lambda: get_upload_presigned_url** ✅：修復 CORS 問題（ContentType + S3 regional endpoint）
+6. **Lambda: issue_cookie** ✅：改用 Signed URL 取代 Signed Cookie
+7. **前端 MemberCourse.tsx** ✅：HLS.js xhrSetup 自動附加簽名參數
+8. **後台 ChapterManager** ✅：上傳已改指向 raw bucket
+9. **S3 CORS 設定** ✅：raw bucket 和 hls bucket 都已設定 CORS
+10. **端對端測試** ✅：上傳 → 轉檔 → 播放 全部通過

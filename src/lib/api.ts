@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://q0ec6jvgnh.execute-api.ap-southeast-1.amazonaws.com/prod";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://dhthoeib97.execute-api.ap-east-2.amazonaws.com/prod";
 
 export async function apiPost<T = any>(path: string, body: unknown, token?: string): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };

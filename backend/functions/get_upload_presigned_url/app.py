@@ -1,8 +1,8 @@
 import json
 import os
 import urllib.request
-import urllib.parse
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -12,7 +12,11 @@ COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-east-2")
 COGNITO_USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
 UPLOAD_URL_EXPIRES = int(os.environ.get("UPLOAD_URL_EXPIRES", "900"))  # 15 min
 
-s3 = boto3.client("s3", region_name=COGNITO_REGION)
+s3 = boto3.client(
+    "s3",
+    region_name=COGNITO_REGION,
+    config=Config(signature_version="s3v4", s3={"addressing_style": "path"})
+)
 
 
 def cors(status, body):
@@ -27,7 +31,7 @@ def cors(status, body):
     }
 
 
-def verify_cognito_token(token):
+def verify_admin_token(token):
     import base64
     import time
 
@@ -52,25 +56,17 @@ def verify_cognito_token(token):
 
     try:
         from jose import jwt as jose_jwt
-        payload = jose_jwt.decode(token, key_data, algorithms=["RS256"], audience=None)
+        payload = jose_jwt.decode(token, key_data, algorithms=["RS256"], options={"verify_aud": False})
     except ImportError:
         payload = json.loads(b64_decode(parts[1]))
 
     if payload.get("exp", 0) < time.time():
         raise ValueError("Token expired")
 
+    if "admin" not in payload.get("cognito:groups", []):
+        raise PermissionError("Admin only")
+
     return payload["sub"]
-
-
-def is_admin(user_id):
-    url = f"{SUPABASE_URL}/rest/v1/user_roles"
-    params = urllib.parse.urlencode({"user_id": f"eq.{user_id}", "role": "eq.admin", "select": "id", "limit": 1})
-    req = urllib.request.Request(f"{url}?{params}", headers={
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-    })
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return bool(json.loads(r.read()))
 
 
 def handler(event, context):
@@ -83,12 +79,11 @@ def handler(event, context):
 
     token = auth_header[7:]
     try:
-        user_id = verify_cognito_token(token)
+        user_id = verify_admin_token(token)
+    except PermissionError as e:
+        return cors(403, {"error": str(e)})
     except Exception as e:
         return cors(401, {"error": f"Invalid token: {e}"})
-
-    if not is_admin(user_id):
-        return cors(403, {"error": "Admin only"})
 
     body = json.loads(event.get("body") or "{}")
     course_id = body.get("course_id")

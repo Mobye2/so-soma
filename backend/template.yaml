@@ -191,29 +191,43 @@ Resources:
         - LambdaInvokePolicy:
             FunctionName: !Ref SendTransactionalEmailFunction
 
+  EmailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solis-email-queue
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EmailDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  EmailDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solis-email-dlq
+      MessageRetentionPeriod: 1209600
+
   ProcessEmailQueueFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: functions/process_email_queue/
       Handler: app.handler
       Timeout: 120
-      Layers:
-        - !Ref SharedLayer
       Environment:
         Variables:
-          SUPABASE_URL: !Ref SupabaseUrl
-          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
           SEND_EMAIL_FUNCTION_NAME: !Ref SendTransactionalEmailFunction
-          EMAIL_QUEUE_BATCH_SIZE: "50"
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref SendTransactionalEmailFunction
+        - SQSPollerPolicy:
+            QueueName: !GetAtt EmailQueue.QueueName
       Events:
-        Schedule:
-          Type: Schedule
+        SQSTrigger:
+          Type: SQS
           Properties:
-            Schedule: rate(5 minutes)
-            Enabled: false  # Enable after SES exits Sandbox
+            Queue: !GetAtt EmailQueue.Arn
+            BatchSize: 10
+            Enabled: true
 
   AuthEmailHookFunction:
     Type: AWS::Serverless::Function
@@ -285,3 +299,7 @@ Parameters:
 Outputs:
   ApiUrl:
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  EmailQueueUrl:
+    Value: !Ref EmailQueue
+  EmailQueueArn:
+    Value: !GetAtt EmailQueue.Arn

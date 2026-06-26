@@ -1,0 +1,9 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "solis-backend"
+resolve_s3 = true
+region = "ap-east-2"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = false
+parameter_overrides = "EcpayMerchantId=3416478 EcpayHashKey=REMOVED EcpayHashIV=REMOVED SupabaseServiceKey=REMOVED"

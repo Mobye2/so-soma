@@ -1,21 +1,44 @@
 import json
 import os
+import urllib.request
 from datetime import datetime, timezone
-from supabase import create_client
+
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+def sb_post(table, data, upsert_on=None):
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    prefer = "resolution=merge-duplicates" if upsert_on else "return=minimal"
+    req = urllib.request.Request(
+        url, method="POST",
+        data=json.dumps(data).encode(),
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": prefer,
+        }
     )
+    with urllib.request.urlopen(req) as r:
+        return r.status
+
+
+def sb_delete(table, params):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    req = urllib.request.Request(
+        url, method="DELETE",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Prefer": "return=minimal",
+        }
+    )
+    with urllib.request.urlopen(req) as r:
+        return r.status
 
 
 def handler(event, context):
-    """
-    Triggered by SNS → SES bounce/complaint notifications.
-    Adds affected emails to suppressed_emails table.
-    """
     for record in event.get("Records", []):
         try:
             sns_message = json.loads(record["Sns"]["Message"])
@@ -29,34 +52,19 @@ def handler(event, context):
             reason = "bounce_" + bounce.get("bounceType", "unknown").lower()
             recipients = bounce.get("bouncedRecipients", [])
         elif notification_type == "Complaint":
-            complaint = sns_message.get("complaint", {})
             reason = "complaint"
-            recipients = complaint.get("complainedRecipients", [])
+            recipients = sns_message.get("complaint", {}).get("complainedRecipients", [])
         else:
             continue
 
-        if not recipients:
+        emails = [r["emailAddress"].lower() for r in recipients if r.get("emailAddress")]
+        if not emails:
             continue
 
-        supabase = get_supabase()
-        now = datetime.now(timezone.utc).isoformat()
+        rows = [{"email": e, "reason": reason} for e in emails]
+        sb_post("suppressed_emails", rows, upsert_on="email")
 
-        rows = [
-            {"email": r["emailAddress"].lower(), "reason": reason, "created_at": now}
-            for r in recipients
-            if r.get("emailAddress")
-        ]
-
-        if rows:
-            supabase.table("suppressed_emails").upsert(
-                rows, on_conflict="email"
-            ).execute()
-
-            # Deactivate subscribers
-            emails = [r["email"] for r in rows]
-            for email in emails:
-                supabase.table("subscribers").update(
-                    {"is_active": False}
-                ).eq("email", email).execute()
+        for email in emails:
+            sb_delete("newsletter_subscribers", f"email=eq.{email}")
 
     return {"statusCode": 200}

@@ -1,7 +1,34 @@
 import { Link } from "react-router-dom";
 import { Instagram, Mail } from "lucide-react";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { apiPost } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const Footer = () => {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    const { error } = await supabase.from("newsletter_subscribers").insert(
+      { email, source: "footer", is_active: true }
+    );
+    if (error?.code === "23505") {
+      toast({ title: "你已經訂閱過了 🌿" });
+    } else if (error) {
+      toast({ title: "訂閱失敗", description: "請稍後再試", variant: "destructive" });
+    } else {
+      toast({ title: "訂閱成功！", description: "感謝你的訂閱 🌿" });
+      apiPost("/send-email", {
+        templateName: "welcome-member",
+        recipientEmail: email,
+        templateData: { name: "" },
+      }).catch(console.error);
+    }
+    setEmail("");
+  };
   return (
     <footer className="bg-accent text-accent-foreground">
       <div className="container-brand section-padding">
@@ -72,16 +99,19 @@ const Footer = () => {
             {/* Newsletter mini signup */}
             <div className="mt-4">
               <p className="text-xs text-accent-foreground/50 mb-2">訂閱電子報</p>
-              <div className="flex gap-2">
+              <form onSubmit={handleSubscribe} className="flex gap-2">
                 <input
                   type="email"
                   placeholder="your@email.com"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="flex-1 px-3 py-2 text-xs rounded-md bg-accent-foreground/10 border border-accent-foreground/20 text-accent-foreground placeholder:text-accent-foreground/40 focus:outline-none focus:ring-1 focus:ring-sage"
                 />
-                <button className="px-3 py-2 text-xs rounded-md bg-sage text-primary-foreground hover:bg-sage/90 transition-colors">
+                <button type="submit" className="px-3 py-2 text-xs rounded-md bg-sage text-primary-foreground hover:bg-sage/90 transition-colors">
                   訂閱
                 </button>
-              </div>
+              </form>
             </div>
           </div>
         </div>

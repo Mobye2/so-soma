@@ -1,59 +1,90 @@
 import json
 import os
+import urllib.request
 from datetime import datetime, timezone
-from supabase import create_client
+
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+def sb_get(table, params=""):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    })
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
+
+
+def sb_patch(table, params, data):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    req = urllib.request.Request(
+        url, method="PATCH",
+        data=json.dumps(data).encode(),
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
     )
+    with urllib.request.urlopen(req) as r:
+        return r.status
+
+
+def sb_post(table, data, upsert_on=None):
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    prefer = f"resolution=merge-duplicates" if upsert_on else "return=minimal"
+    req = urllib.request.Request(
+        url, method="POST",
+        data=json.dumps(data).encode(),
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": prefer,
+        }
+    )
+    with urllib.request.urlopen(req) as r:
+        return r.status
+
+
+def sb_delete(table, params):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    req = urllib.request.Request(
+        url, method="DELETE",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Prefer": "return=minimal",
+        }
+    )
+    with urllib.request.urlopen(req) as r:
+        return r.status
 
 
 def handler(event, context):
-    """
-    GET /unsubscribe?token=<hex>
-    Marks the token as used and adds the email to suppressed_emails.
-    """
     params = event.get("queryStringParameters") or {}
     token = params.get("token", "").strip()
 
     if not token:
         return _html(400, "<p>退訂連結無效。</p>")
 
-    supabase = get_supabase()
+    rows = sb_get("email_unsubscribe_tokens", f"select=email,used_at&token=eq.{token}")
 
-    # Look up token
-    result = supabase.table("email_unsubscribe_tokens").select(
-        "email, used_at"
-    ).eq("token", token).execute()
-
-    if not result.data:
+    if not rows:
         return _html(404, "<p>退訂連結不存在或已失效。</p>")
 
-    row = result.data[0]
+    row = rows[0]
     if row.get("used_at"):
         return _html(200, "<p>你已經退訂成功。</p>")
 
     email = row["email"].lower()
     now = datetime.now(timezone.utc).isoformat()
 
-    # Mark token used
-    supabase.table("email_unsubscribe_tokens").update(
-        {"used_at": now}
-    ).eq("token", token).execute()
-
-    # Add to suppression list
-    supabase.table("suppressed_emails").upsert(
-        {"email": email, "reason": "unsubscribe"},
-        on_conflict="email",
-    ).execute()
-
-    # Remove from newsletter_subscribers
-    supabase.table("newsletter_subscribers").delete().eq(
-        "email", email
-    ).execute()
+    sb_patch("email_unsubscribe_tokens", f"token=eq.{token}", {"used_at": now})
+    sb_delete("newsletter_subscribers", f"email=eq.{email}")
 
     return _html(200, "<p>已為你取消訂閱。你不會再收到我們的電子報。</p>")
 

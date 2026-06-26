@@ -3,13 +3,14 @@ import os
 import uuid
 import secrets
 import boto3
-from supabase import create_client, Client
+import urllib.request
 
 SITE_NAME = "煦日之森"
 FROM_EMAIL = "noreply@solisforest.com"
 SES_REGION = os.environ.get("SES_REGION", "ap-southeast-1")
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-# Email subject templates
 SUBJECTS = {
     "event-registration-confirmation": lambda d: f"報名收到了｜{d.get('eventTitle', '活動')}・煦日之森",
     "order-payment-success": lambda d: f"付款成功｜訂單 {d.get('orderId', '')}・煦日之森",
@@ -20,7 +21,6 @@ SUBJECTS = {
     "blog-post-subscriber-notice": lambda d: f"新文章｜{d.get('title', '')}・煦日之森",
 }
 
-# Plain text email bodies
 BODIES = {
     "event-registration-confirmation": lambda d: (
         f"{d.get('name', '')}，歡迎你\n\n"
@@ -56,12 +56,50 @@ BODIES = {
 }
 
 
-def get_supabase_client() -> Client:
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        raise ValueError("Missing Supabase credentials")
-    return create_client(url, key)
+def sb_get(table, params=""):
+    url = f"{SUPABASE_URL}/rest/v1/{table}?{params}"
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    })
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
+
+
+def sb_post(table, data, prefer="return=minimal"):
+    req = urllib.request.Request(
+        f"{SUPABASE_URL}/rest/v1/{table}",
+        method="POST",
+        data=json.dumps(data).encode(),
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": prefer,
+        }
+    )
+    with urllib.request.urlopen(req) as r:
+        return r.status
+
+
+def get_or_create_token(email):
+    rows = sb_get("email_unsubscribe_tokens", f"select=token,used_at&email=eq.{email}")
+    if rows and not rows[0].get("used_at"):
+        return rows[0]["token"]
+    # Delete old token and create fresh one
+    req = urllib.request.Request(
+        f"{SUPABASE_URL}/rest/v1/email_unsubscribe_tokens?email=eq.{email}",
+        method="DELETE",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Prefer": "return=minimal",
+        }
+    )
+    with urllib.request.urlopen(req): pass
+    token = secrets.token_hex(32)
+    sb_post("email_unsubscribe_tokens", {"token": token, "email": email})
+    return token
 
 
 def handler(event, context):
@@ -78,64 +116,22 @@ def handler(event, context):
     try:
         body = json.loads(event.get("body", "{}"))
         template_name = body.get("templateName") or body.get("template_name")
-        recipient_email = body.get("recipientEmail") or body.get("recipient_email")
-        idempotency_key = body.get("idempotencyKey") or body.get("idempotency_key") or str(uuid.uuid4())
+        recipient_email = (body.get("recipientEmail") or body.get("recipient_email") or "").lower().strip()
         template_data = body.get("templateData", {})
 
         if not template_name or not recipient_email:
             return _resp(400, {"error": "templateName and recipientEmail required"})
 
-        supabase = get_supabase_client()
-        message_id = str(uuid.uuid4())
-
-        # Check suppression list
-        suppressed = supabase.table("suppressed_emails").select("id").eq(
-            "email", recipient_email.lower()
-        ).execute()
-
-        if suppressed.data and len(suppressed.data) > 0:
-            supabase.table("email_send_log").insert({
-                "message_id": message_id,
-                "template_name": template_name,
-                "recipient_email": recipient_email,
-                "status": "suppressed",
-            }).execute()
-            return _resp(200, {"success": False, "reason": "email_suppressed"})
-
-        # Get or create unsubscribe token
-        token_result = supabase.table("email_unsubscribe_tokens").select(
-            "token, used_at"
-        ).eq("email", recipient_email.lower()).execute()
-
-        token_row = token_result.data[0] if token_result.data else None
-        if token_row and not token_row.get("used_at"):
-            unsub_token = token_row["token"]
-        elif not token_row:
-            unsub_token = secrets.token_hex(32)
-            supabase.table("email_unsubscribe_tokens").upsert(
-                {"token": unsub_token, "email": recipient_email.lower()},
-                on_conflict="email",
-            ).execute()
-        else:
-            # Token used but not suppressed - safety fallback
-            supabase.table("email_send_log").insert({
-                "message_id": message_id,
-                "template_name": template_name,
-                "recipient_email": recipient_email,
-                "status": "suppressed",
-            }).execute()
-            return _resp(200, {"success": False, "reason": "email_suppressed"})
-
-        # Resolve subject and body
         subject_fn = SUBJECTS.get(template_name)
         if not subject_fn:
             return _resp(404, {"error": f"Template '{template_name}' not found"})
 
         subject = subject_fn(template_data)
         body_fn = BODIES.get(template_name)
-        text_body = body_fn(template_data) if body_fn else f"來自煦日之森的通知"
+        text_body = body_fn(template_data) if body_fn else "來自煦日之森的通知"
 
         # Add unsubscribe footer
+        unsub_token = get_or_create_token(recipient_email)
         unsub_url = f"https://www.solisforest.com/unsubscribe?token={unsub_token}"
         text_body += f"\n\n---\n如果你不想再收到信件：{unsub_url}"
 
@@ -150,13 +146,14 @@ def handler(event, context):
             },
         )
 
-        # Log success
-        supabase.table("email_send_log").insert({
+        # Log
+        message_id = str(uuid.uuid4())
+        sb_post("email_send_log", {
             "message_id": message_id,
             "template_name": template_name,
             "recipient_email": recipient_email,
             "status": "sent",
-        }).execute()
+        })
 
         return _resp(200, {"success": True})
 

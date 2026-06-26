@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { Leaf, Heart, BookOpen, ArrowRight } from "lucide-react";
 import heroForest from "@/assets/hero-forest.webp";
 import { supabase } from "@/integrations/supabase/client";
+import { apiPost } from "@/lib/api";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { trackNewsletterSubscribe } from "@/lib/analytics";
@@ -34,7 +35,9 @@ const Index = () => {
   const handleNewsletter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newsletterEmail) return;
-    const { error } = await supabase.from("newsletter_subscribers").insert({ email: newsletterEmail, source: "homepage" });
+    const { error } = await supabase.from("newsletter_subscribers").insert(
+      { email: newsletterEmail, source: "homepage", is_active: true }
+    );
     if (error?.code === "23505") {
       toast({ title: "你已經訂閱過了 🌿" });
     } else if (error) {
@@ -42,6 +45,11 @@ const Index = () => {
     } else {
       toast({ title: "訂閱成功！", description: "感謝你的訂閱 🌿" });
       trackNewsletterSubscribe("Homepage Footer");
+      apiPost("/send-email", {
+        templateName: "welcome-member",
+        recipientEmail: newsletterEmail,
+        templateData: { name: "" },
+      }).catch(console.error);
     }
     setNewsletterEmail("");
   };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ const emptyForm = {
 
 const IGPostsTab = () => {
   const { toast } = useToast();
+  const { getIdToken } = useAuth();
   const [posts, setPosts] = useState<IGPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,14 +61,15 @@ const IGPostsTab = () => {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("ig_posts")
-      .select("*")
-      .order("post_date", { ascending: false });
-    if (error) {
+    try {
+      const token = await getIdToken();
+      const data = await apiPost("/admin-db", {
+        method: "GET",
+        table: "ig_posts?order=post_date.desc"
+      }, token || undefined);
+      setPosts(Array.isArray(data) ? data as IGPost[] : []);
+    } catch (error: any) {
       toast({ title: "載入失敗", description: error.message, variant: "destructive" });
-    } else {
-      setPosts((data || []) as IGPost[]);
     }
     setLoading(false);
   };
@@ -135,41 +138,60 @@ const IGPostsTab = () => {
       published: form.published,
     };
 
-    const { error } = editingId
-      ? await supabase.from("ig_posts").update(payload).eq("id", editingId)
-      : await supabase.from("ig_posts").insert(payload);
-
-    setSaving(false);
-    if (error) {
+    try {
+      const token = await getIdToken();
+      if (editingId) {
+        await apiPost("/admin-db", {
+          method: "PATCH",
+          table: "ig_posts",
+          payload,
+          filters: { id: `eq.${editingId}` }
+        }, token || undefined);
+      } else {
+        await apiPost("/admin-db", {
+          method: "POST",
+          table: "ig_posts",
+          payload
+        }, token || undefined);
+      }
+      toast({ title: editingId ? "已更新" : "已建立" });
+      setDialogOpen(false);
+      load();
+    } catch (error: any) {
       toast({ title: "儲存失敗", description: error.message, variant: "destructive" });
-      return;
     }
-    toast({ title: editingId ? "已更新" : "已建立" });
-    setDialogOpen(false);
-    load();
+    setSaving(false);
   };
 
   const togglePublish = async (p: IGPost) => {
-    const { error } = await supabase
-      .from("ig_posts")
-      .update({ published: !p.published })
-      .eq("id", p.id);
-    if (error) {
+    try {
+      const token = await getIdToken();
+      await apiPost("/admin-db", {
+        method: "PATCH",
+        table: "ig_posts",
+        payload: { published: !p.published },
+        filters: { id: `eq.${p.id}` }
+      }, token || undefined);
+      load();
+    } catch (error: any) {
       toast({ title: "更新失敗", description: error.message, variant: "destructive" });
-      return;
     }
-    load();
   };
 
   const remove = async (p: IGPost) => {
     if (!confirm(`確定刪除「${p.title}」?`)) return;
-    const { error } = await supabase.from("ig_posts").delete().eq("id", p.id);
-    if (error) {
+    try {
+      const token = await getIdToken();
+      await apiPost("/admin-db", {
+        method: "DELETE",
+        table: "ig_posts",
+        filters: { id: `eq.${p.id}` }
+      }, token || undefined);
+      toast({ title: "已刪除" });
+      load();
+    } catch (error: any) {
       toast({ title: "刪除失敗", description: error.message, variant: "destructive" });
-      return;
     }
-    toast({ title: "已刪除" });
-    load();
   };
 
   return (

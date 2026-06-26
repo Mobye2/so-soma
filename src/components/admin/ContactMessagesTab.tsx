@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -20,16 +21,22 @@ const subjectMap: Record<string, string> = {
 };
 
 const ContactMessagesTab = () => {
+  const { getIdToken } = useAuth();
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
-        .from("contact_messages")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (data) setMessages(data);
+      try {
+        const token = await getIdToken();
+        const data = await apiPost("/admin-db", {
+          method: "GET",
+          table: "contact_messages?order=created_at.desc"
+        }, token || undefined);
+        if (data) setMessages(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error("Failed to load messages:", e);
+      }
       setLoading(false);
     };
     fetch();

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "";
 import Layout from "@/components/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { Navigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import AdminsTab from "@/components/admin/AdminsTab";
 import ContactMessagesTab from "@/components/admin/ContactMessagesTab";
 import IGPostsTab from "@/components/admin/IGPostsTab";
@@ -56,6 +57,7 @@ const statusColor = (status: string) => {
 
 const Admin = () => {
   const { user, isAdmin, loading } = useAdminCheck();
+  const { getIdToken } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -63,12 +65,17 @@ const Admin = () => {
   useEffect(() => {
     if (!isAdmin) return;
     const fetchData = async () => {
-      const [ordersRes, regsRes] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }),
-        supabase.from("event_registrations").select("*").order("created_at", { ascending: false }),
-      ]);
-      if (ordersRes.data) setOrders(ordersRes.data);
-      if (regsRes.data) setRegistrations(regsRes.data);
+      try {
+        const token = await getIdToken();
+        const [ordersRes, regsRes] = await Promise.all([
+          apiPost("/admin-db", { method: "GET", table: "orders?order=created_at.desc" }, token || undefined),
+          apiPost("/admin-db", { method: "GET", table: "event_registrations?order=created_at.desc" }, token || undefined),
+        ]);
+        if (ordersRes) setOrders(Array.isArray(ordersRes) ? ordersRes : []);
+        if (regsRes) setRegistrations(Array.isArray(regsRes) ? regsRes : []);
+      } catch (e) {
+        console.error("Failed to load admin data:", e);
+      }
       setLoadingData(false);
     };
     fetchData();

@@ -46,6 +46,13 @@ BODIES = {
         "很高興你在這裡。\n\n"
         "煦日之森・Solis Forest"
     ),
+    "blog-post-subscriber-notice": lambda d: (
+        f"{d.get('name', '')}，你好\n\n"
+        f"煦日之森有新文章：《{d.get('title', '')}》\n\n"
+        f"{d.get('excerpt', '')}\n\n"
+        f"閱讀全文：{d.get('url', 'https://www.solisforest.com/blog')}\n\n"
+        "煦日之森・Solis Forest"
+    ),
 }
 
 

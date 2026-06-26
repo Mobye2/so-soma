@@ -10,6 +10,10 @@ Globals:
     Timeout: 30
     MemorySize: 256
 
+Conditions:
+  HasSesTopicArn: !Not [!Equals [!Ref SesNotificationTopicArn, ""]]
+  HasCognitoKmsKey: !Not [!Equals [!Ref CognitoKmsKeyId, ""]]
+
 Resources:
   # Shared Layer (supabase-py, python-jose, etc.)
   SharedLayer:
@@ -133,6 +137,108 @@ Resources:
             Path: /ecpay-callback
             Method: POST
 
+  HandleEmailUnsubscribeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/handle_email_unsubscribe/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /unsubscribe
+            Method: GET
+
+  HandleEmailSuppressionFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasSesTopicArn
+    Properties:
+      CodeUri: functions/handle_email_suppression/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+      Events:
+        SNS:
+          Type: SNS
+          Properties:
+            Topic: !Ref SesNotificationTopicArn
+
+  NotifyPublishedPostsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/notify_published_posts/
+      Handler: app.handler
+      Timeout: 300
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+          SEND_EMAIL_FUNCTION_NAME: !Ref SendTransactionalEmailFunction
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SendTransactionalEmailFunction
+
+  ProcessEmailQueueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/process_email_queue/
+      Handler: app.handler
+      Timeout: 120
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+          SEND_EMAIL_FUNCTION_NAME: !Ref SendTransactionalEmailFunction
+          EMAIL_QUEUE_BATCH_SIZE: "50"
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref SendTransactionalEmailFunction
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Enabled: false  # Enable after SES exits Sandbox
+
+  AuthEmailHookFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasCognitoKmsKey
+    Properties:
+      CodeUri: functions/auth_email_hook/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SES_REGION: !Ref SesRegion
+          KMS_KEY_ID: !Ref CognitoKmsKeyId
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: '*'
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${CognitoKmsKeyId}"
+
 Parameters:
   SupabaseUrl:
     Type: String
@@ -167,6 +273,14 @@ Parameters:
     Type: String
     Default: "https://www.solisforest.com"
     Description: Frontend site URL for ECPay return redirect
+  SesNotificationTopicArn:
+    Type: String
+    Default: ""
+    Description: SNS Topic ARN for SES bounce/complaint notifications
+  CognitoKmsKeyId:
+    Type: String
+    Default: ""
+    Description: KMS Key ID used by Cognito Custom Email Sender
 
 Outputs:
   ApiUrl:

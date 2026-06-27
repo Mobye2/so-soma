@@ -9,7 +9,7 @@ import PasswordTab from "@/components/member/PasswordTab";
 import OrdersTab from "@/components/member/OrdersTab";
 
 const Member = () => {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, db } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -63,7 +63,7 @@ const Member = () => {
             </TabsContent>
 
             <TabsContent value="orders">
-              <OrdersTab user={user} />
+              <OrdersTab user={user} db={db} />
             </TabsContent>
           </Tabs>
         </div>

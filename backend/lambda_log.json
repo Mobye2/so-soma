@@ -1,0 +1,71 @@
+{
+    "events": [
+        {
+            "timestamp": 1782560677999,
+            "message": "INIT_START Runtime Version: python:3.13.mainlinev2.v11\tRuntime Version ARN: arn:aws:lambda:ap-east-2::runtime:b80aa8cfc4306316d8164ccc5e4a7effaf5d6038865946d200964f23367ef28b\n",
+            "ingestionTime": 1782560686114
+        },
+        {
+            "timestamp": 1782560679110,
+            "message": "START RequestId: 86e9ff7b-f720-4cd2-8829-bb14937ecd89 Version: $LATEST\n",
+            "ingestionTime": 1782560686114
+        },
+        {
+            "timestamp": 1782560680455,
+            "message": "generate_link response keys: ['id', 'aud', 'role', 'email', 'email_confirmed_at', 'phone', 'confirmed_at', 'recovery_sent_at', 'app_metadata', 'user_metadata', 'identities', 'created_at', 'updated_at', 'is_anonymous', 'action_link', 'email_otp', 'hashed_token', 'verification_type', 'redirect_to']\n",
+            "ingestionTime": 1782560686114
+        },
+        {
+            "timestamp": 1782560680456,
+            "message": "END RequestId: 86e9ff7b-f720-4cd2-8829-bb14937ecd89\n",
+            "ingestionTime": 1782560686114
+        },
+        {
+            "timestamp": 1782560680456,
+            "message": "REPORT RequestId: 86e9ff7b-f720-4cd2-8829-bb14937ecd89\tDuration: 1346.28 ms\tBilled Duration: 2455 ms\tMemory Size: 256 MB\tMax Memory Used: 113 MB\tInit Duration: 1107.95 ms\t\n",
+            "ingestionTime": 1782560686114
+        },
+        {
+            "timestamp": 1782560688584,
+            "message": "START RequestId: aeeff2be-3e96-438b-b13b-5997a91a1ea8 Version: $LATEST\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689038,
+            "message": "generate_link response keys: ['id', 'aud', 'role', 'email', 'email_confirmed_at', 'phone', 'confirmed_at', 'recovery_sent_at', 'app_metadata', 'user_metadata', 'identities', 'created_at', 'updated_at', 'is_anonymous', 'action_link', 'email_otp', 'hashed_token', 'verification_type', 'redirect_to']\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689040,
+            "message": "END RequestId: aeeff2be-3e96-438b-b13b-5997a91a1ea8\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689040,
+            "message": "REPORT RequestId: aeeff2be-3e96-438b-b13b-5997a91a1ea8\tDuration: 455.28 ms\tBilled Duration: 456 ms\tMemory Size: 256 MB\tMax Memory Used: 113 MB\t\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689223,
+            "message": "START RequestId: c46f668a-afc5-48b8-812d-f6c3c58067e4 Version: $LATEST\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689739,
+            "message": "generate_link response keys: ['id', 'aud', 'role', 'email', 'email_confirmed_at', 'phone', 'confirmed_at', 'recovery_sent_at', 'app_metadata', 'user_metadata', 'identities', 'created_at', 'updated_at', 'is_anonymous', 'action_link', 'email_otp', 'hashed_token', 'verification_type', 'redirect_to']\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689741,
+            "message": "END RequestId: c46f668a-afc5-48b8-812d-f6c3c58067e4\n",
+            "ingestionTime": 1782560697595
+        },
+        {
+            "timestamp": 1782560689741,
+            "message": "REPORT RequestId: c46f668a-afc5-48b8-812d-f6c3c58067e4\tDuration: 517.19 ms\tBilled Duration: 518 ms\tMemory Size: 256 MB\tMax Memory Used: 113 MB\t\n",
+            "ingestionTime": 1782560697595
+        }
+    ],
+    "nextForwardToken": "f/39752431742831041569041429882433296911196298598916358151/s",
+    "nextBackwardToken": "b/39752431480975691447894852940641146627405749686712467456/s"
+}

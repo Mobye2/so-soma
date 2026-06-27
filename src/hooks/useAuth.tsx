@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CognitoUserPool,
   CognitoUser,
   AuthenticationDetails,
   CognitoUserAttribute,
 } from "amazon-cognito-identity-js";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, setSupabaseToken } from "@/integrations/supabase/client";
+import { apiPost } from "@/lib/api";
 
 const poolData = {
   UserPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
@@ -29,7 +30,23 @@ export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [supabaseToken, _setSupabaseToken] = useState<string | null>(null);
   const [pendingCognitoUser, setPendingCognitoUser] = useState<CognitoUser | null>(null);
+
+  const syncAuth = async (cognitoJwt: string): Promise<string | null> => {
+    try {
+      const { supabase_token } = await apiPost<{ supabase_token: string }>(
+        "/sync-auth",
+        {},
+        cognitoJwt
+      );
+      setSupabaseToken(supabase_token);
+      return supabase_token;
+    } catch (err) {
+      console.error("Failed to sync auth:", err);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const cognitoUser = userPool.getCurrentUser();
@@ -48,11 +65,13 @@ export const useAuth = () => {
       const currentUser = { email: payload.email, sub: payload.sub };
       setUser(currentUser);
 
+      await syncAuth(session.getIdToken().getJwtToken());
+
       const { data } = await supabase
         .from("profiles")
         .select("display_name, phone, email")
         .eq("id", currentUser.sub)
-        .single();
+        .maybeSingle();
       setProfile(data);
       setLoading(false);
     });
@@ -69,11 +88,13 @@ export const useAuth = () => {
           const currentUser = { email: payload.email, sub: payload.sub };
           setUser(currentUser);
 
+          await syncAuth(session.getIdToken().getJwtToken());
+
           const { data } = await supabase
             .from("profiles")
             .select("display_name, phone, email")
             .eq("id", currentUser.sub)
-            .single();
+            .maybeSingle();
           setProfile(data);
           resolve();
         },
@@ -94,11 +115,14 @@ export const useAuth = () => {
           const payload = session.getIdToken().decodePayload();
           const currentUser = { email: payload.email, sub: payload.sub };
           setUser(currentUser);
+
+          await syncAuth(session.getIdToken().getJwtToken());
+
           const { data } = await supabase
             .from("profiles")
             .select("display_name, phone, email")
             .eq("id", currentUser.sub)
-            .single();
+            .maybeSingle();
           setProfile(data);
           setPendingCognitoUser(null);
           resolve();
@@ -116,7 +140,6 @@ export const useAuth = () => {
 
       userPool.signUp(email, password, attributes, [], async (err, result) => {
         if (err) return reject(err);
-
         const sub = result!.userSub;
         await supabase.from("profiles").insert({
           id: sub,
@@ -124,7 +147,6 @@ export const useAuth = () => {
           display_name: name || null,
           phone: phone || null,
         });
-
         resolve();
       });
     });
@@ -133,7 +155,7 @@ export const useAuth = () => {
   const confirmSignUp = (email: string, code: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
-      cognitoUser.confirmRegistration(code, true, (err, result) => {
+      cognitoUser.confirmRegistration(code, true, (err) => {
         if (err) return reject(err);
         resolve();
       });
@@ -163,6 +185,8 @@ export const useAuth = () => {
   const signOut = () => {
     const cognitoUser = userPool.getCurrentUser();
     cognitoUser?.signOut();
+    setSupabaseToken(null);
+    _setSupabaseToken(null);
     setUser(null);
     setProfile(null);
   };
@@ -178,5 +202,5 @@ export const useAuth = () => {
     });
   };
 
-  return { user, profile, loading, signIn, signUp, confirmSignUp, signOut, completeNewPassword, needsNewPassword: !!pendingCognitoUser, forgotPassword, confirmForgotPassword, getIdToken };
+  return { user, profile, loading, db: supabase, signIn, signUp, confirmSignUp, signOut, completeNewPassword, needsNewPassword: !!pendingCognitoUser, forgotPassword, confirmForgotPassword, getIdToken };
 };

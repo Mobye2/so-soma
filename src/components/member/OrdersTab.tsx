@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiPost } from "@/lib/api";
-import type { User } from "@supabase/supabase-js";
+
+interface AuthUser { email: string; sub: string; }
 interface OrderItem {
   product_title: string;
   quantity: number;
@@ -27,7 +28,7 @@ const statusMap: Record<string, string> = {
   cancelled: "已取消",
 };
 
-const OrdersTab = ({ user }: { user: User }) => {
+const OrdersTab = ({ user, db }: { user: AuthUser; db: SupabaseClient }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
@@ -65,7 +66,7 @@ const OrdersTab = ({ user }: { user: User }) => {
   useEffect(() => {
     const fetchOrders = async () => {
       setLoading(true);
-      const { data: orderData } = await supabase
+      const { data: orderData } = await db
         .from("orders")
         .select("*")
         .eq("customer_email", user.email || "")
@@ -73,7 +74,7 @@ const OrdersTab = ({ user }: { user: User }) => {
 
       if (orderData && orderData.length > 0) {
         const orderIds = orderData.map((o) => o.id);
-        const { data: itemsData } = await supabase
+        const { data: itemsData } = await db
           .from("order_items")
           .select("order_id, product_title, quantity, unit_price")
           .in("order_id", orderIds);

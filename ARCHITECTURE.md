@@ -78,7 +78,7 @@
 
 | 頁面 | 路由 | Lambda | Supabase 表 |
 |------|------|--------|-------------|
-| 登入／註冊 | `/auth` | `auth_email_hook`（待啟用） | — |
+| 登入／註冊 | `/auth` | `sync_auth` | — |
 | 會員中心 | `/member` | — | `profiles`、`orders` |
 | 修改密碼 | `/member` → 密碼 tab | — | Cognito |
 | 訂單記錄 | `/member` → 訂單 tab | — | `orders`、`order_items` |
@@ -115,6 +115,7 @@
 | `process_email_queue` | EventBridge rate(5min)，disabled | ✅ 部署 | 排空 pgmq queue（備用） |
 | `handle_email_suppression` | SNS（SES bounce/complaint） | ⏳ 等 SES 出 Sandbox | 自動加黑名單 |
 | `auth_email_hook` | Cognito Custom Email Sender | ⏳ 等 Cognito KMS 設定 | 驗證碼中文信 |
+| `sync_auth` | POST `/sync-auth` | ✅ 部署 | Cognito ↔ Supabase 身份橋接，回傳 ES256 JWT |
 | `sync_gsc_metrics` | EventBridge cron 每日，disabled | ⏳ 等網站上線、GSC 設定 | 同步 SEO 數據 |
 
 ---
@@ -160,6 +161,52 @@
 | `seo_query_metrics` | GSC 關鍵字維度數據 |
 | `seo_sync_log` | GSC 同步記錄 |
 | `launch_notify_subscribers` | 產品上架通知名單 |
+
+---
+
+## 身份驗證架構（Cognito ↔ Supabase 橋接）
+
+本專案使用 **AWS Cognito 做主要 Auth**，Supabase 做資料庫。兩個系統的身份需要橋接。
+
+### 登入流程
+
+```
+用戶輸入帳密
+  → Cognito 驗證，回傳 Cognito JWT（RS256，id token）
+  → 前端 POST /sync-auth，帶 Cognito JWT
+      → Lambda 驗證 Cognito JWT（JWKS 公鑰驗簽）
+      → 查 Supabase auth.users 是否已有對應 user
+          ┌── 已存在（id 吻合）→ 直接用
+          ├── email 存在但 id 不同 → 更新 id 為 Cognito sub
+          └── 不存在 → 建立新 user（id = Cognito sub）
+      → 呼叫 Supabase Admin generate_link（magiclink）
+      → 用 hashed_token 呼叫 /auth/v1/verify
+      → 拿到 Supabase 原生 ES256 JWT（access_token）
+  → 前端收到 supabase_token
+  → 存入 module-level _token
+  → 所有 supabase.from() 查詢透過自訂 fetch 注入 Authorization header
+```
+
+### 關鍵設計決策
+
+| 決策 | 原因 |
+|------|------|
+| 不自簽 JWT | Supabase 使用 ECC P-256（ES256），無法用 HS256 自簽 |
+| 用 generate_link + verify | 唯一能拿到 Supabase 原生 ES256 token 的方式 |
+| ensure_supabase_user 邏輯 | 處理 email 已被舊 Supabase user 佔用的情況 |
+| module-level _token | 避免建立多個 GoTrueClient instance，統一注入 header |
+| profiles 用 Cognito sub 做 id | Cognito sub 是穩定的 UUID，跨系統唯一識別符 |
+
+### orders RLS 設計
+
+`orders` 表用 `auth.jwt() ->> 'email'` 比對 `customer_email`，而非查 `auth.users` 表（因為舊訂單可能是 email 訂單，不是 auth user）。
+
+```sql
+USING (
+  customer_email = (auth.jwt() ->> 'email') OR
+  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
+)
+```
 
 ---
 

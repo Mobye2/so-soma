@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { apiPost } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";  // Keep for storage only
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +40,6 @@ const empty: Partial<Post> = { title: "", slug: "", excerpt: "", content: "", ca
 const wordCount = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
 
 const BlogPostsTab = () => {
-  const { getIdToken } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Post> | null>(null);
@@ -55,12 +52,13 @@ const BlogPostsTab = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const token = await getIdToken();
-      const data = await apiPost("/admin-db", {
-        method: "GET",
-        table: "blog_posts?order=created_at.desc"
-      }, token || undefined);
-      setPosts(Array.isArray(data) ? data as Post[] : []);
+      const { data, error } = await supabase
+        .from("blog_posts")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      setPosts(data || []);
     } catch (e) {
       console.error("Failed to load blog posts:", e);
     }
@@ -93,22 +91,25 @@ const BlogPostsTab = () => {
     }
     const payload = buildPayload(p, opts?.publishOverride);
     try {
-      const token = await getIdToken();
       if (p.id) {
-        const data = await apiPost("/admin-db", {
-          method: "PATCH",
-          table: "blog_posts",
-          payload,
-          filters: { id: `eq.${p.id}` }
-        }, token || undefined);
-        return Array.isArray(data) && data.length > 0 ? data[0] as Post : null;
+        const { data, error } = await supabase
+          .from("blog_posts")
+          .update(payload)
+          .eq("id", p.id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        return data;
       } else {
-        const data = await apiPost("/admin-db", {
-          method: "POST",
-          table: "blog_posts",
-          payload
-        }, token || undefined);
-        return Array.isArray(data) && data.length > 0 ? data[0] as Post : null;
+        const { data, error } = await supabase
+          .from("blog_posts")
+          .insert(payload)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        return data;
       }
     } catch (error: any) {
       if (!opts?.silent) toast({ title: "儲存失敗", description: error.message, variant: "destructive" });
@@ -168,12 +169,12 @@ const BlogPostsTab = () => {
   const remove = async (id: string) => {
     if (!confirm("確定要刪除這篇文章？")) return;
     try {
-      const token = await getIdToken();
-      await apiPost("/admin-db", {
-        method: "DELETE",
-        table: "blog_posts",
-        filters: { id: `eq.${id}` }
-      }, token || undefined);
+      const { error } = await supabase
+        .from("blog_posts")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
       toast({ title: "已刪除" });
       load();
     } catch (error: any) {

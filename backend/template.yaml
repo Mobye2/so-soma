@@ -516,6 +516,29 @@ Resources:
             Path: /admin-db
             Method: POST
 
+  # Lambda: sync Cognito user to Supabase Auth and return Supabase JWT
+  SyncAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/sync_auth/
+      Handler: app.handler
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
+          SUPABASE_JWT_SECRET: !Ref SupabaseJwtSecret
+          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /sync-auth
+            Method: POST
+
   # Lambda: trigger AWS Batch job on S3 upload (S3 notification set via setup-s3-notification.sh)
   TriggerBatchFunction:
     Type: AWS::Serverless::Function
@@ -611,6 +634,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Supabase Service Role Key
+  SupabaseJwtSecret:
+    Type: String
+    NoEcho: true
+    Description: Supabase JWT Secret (from project settings)
   SesRegion:
     Type: String
     Default: ap-southeast-1

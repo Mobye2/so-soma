@@ -5,13 +5,24 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// 用 global.headers 注入 token，不走 GoTrue session
+// setSupabaseToken() 直接換 header，整個 app 共用同一個 instance
+let _token: string | null = null;
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: {
+    fetch: (url, options = {}) => {
+      const headers = new Headers((options.headers as HeadersInit) || {});
+      if (_token) {
+        headers.set('Authorization', `Bearer ${_token}`);
+        headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
+      }
+      return fetch(url, { ...options, headers });
+    },
+  },
 });
+
+export function setSupabaseToken(token: string | null) {
+  _token = token;
+}

@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { apiPost } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import AdminsTab from "@/components/admin/AdminsTab";
 import ContactMessagesTab from "@/components/admin/ContactMessagesTab";
 import IGPostsTab from "@/components/admin/IGPostsTab";
@@ -57,7 +56,6 @@ const statusColor = (status: string) => {
 
 const Admin = () => {
   const { user, isAdmin, loading } = useAdminCheck();
-  const { getIdToken } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -66,13 +64,13 @@ const Admin = () => {
     if (!isAdmin) return;
     const fetchData = async () => {
       try {
-        const token = await getIdToken();
+        // 直接用 Supabase，不用 Lambda
         const [ordersRes, regsRes] = await Promise.all([
-          apiPost("/admin-db", { method: "GET", table: "orders?order=created_at.desc" }, token || undefined),
-          apiPost("/admin-db", { method: "GET", table: "event_registrations?order=created_at.desc" }, token || undefined),
+          supabase.from("orders").select("*").order("created_at", { ascending: false }),
+          supabase.from("event_registrations").select("*").order("created_at", { ascending: false }),
         ]);
-        if (ordersRes) setOrders(Array.isArray(ordersRes) ? ordersRes : []);
-        if (regsRes) setRegistrations(Array.isArray(regsRes) ? regsRes : []);
+        if (ordersRes.data) setOrders(ordersRes.data);
+        if (regsRes.data) setRegistrations(regsRes.data);
       } catch (e) {
         console.error("Failed to load admin data:", e);
       }

@@ -170,6 +170,7 @@ const CoursesTab = () => {
         cta_label: "立即購買",
         is_active: !!editing.is_active,
         slug: courseSlug,
+        cover_image: editing.cover_image || null,
       };
 
       if (editing.product_id) {

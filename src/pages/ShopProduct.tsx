@@ -113,8 +113,8 @@ const ShopProduct = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             {/* 左側：圖片 */}
             <div>
-              {course?.cover_image ? (
-                <img src={course.cover_image} alt={product.title} className="w-full rounded-xl object-cover aspect-video" />
+              {product.cover_image ? (
+                <img src={product.cover_image} alt={product.title} className="w-full rounded-xl object-cover aspect-video" />
               ) : (
                 <div className="w-full rounded-xl bg-mist aspect-video flex items-center justify-center">
                   <BookOpen className="w-16 h-16 text-muted-foreground/30" />

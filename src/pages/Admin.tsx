@@ -11,7 +11,7 @@ import AdminsTab from "@/components/admin/AdminsTab";
 import ContactMessagesTab from "@/components/admin/ContactMessagesTab";
 import IGPostsTab from "@/components/admin/IGPostsTab";
 import BlogPostsTab from "@/components/admin/BlogPostsTab";
-import CoursesTab from "@/components/admin/CoursesTab";
+import ProductsTab from "@/components/admin/ProductsTab";
 import SEOMetricsTab from "@/components/admin/SEOMetricsTab";
 import SubscribersTab from "@/components/admin/SubscribersTab";
 import CourseEnrollmentsTab from "@/components/admin/CourseEnrollmentsTab";
@@ -125,7 +125,7 @@ const Admin = () => {
               <TabsTrigger value="contacts">聯絡訊息</TabsTrigger>
               <TabsTrigger value="ig">IG 貼文</TabsTrigger>
               <TabsTrigger value="blog">部落格</TabsTrigger>
-              <TabsTrigger value="courses">課程管理</TabsTrigger>
+              <TabsTrigger value="courses">商品管理</TabsTrigger>
               <TabsTrigger value="enrollments">課程授權</TabsTrigger>
               <TabsTrigger value="seo">SEO 監控</TabsTrigger>
               <TabsTrigger value="subscribers">訂閱名單</TabsTrigger>
@@ -241,7 +241,7 @@ const Admin = () => {
             </TabsContent>
 
             <TabsContent value="courses">
-              <CoursesTab />
+              <ProductsTab />
             </TabsContent>
 
             <TabsContent value="enrollments">

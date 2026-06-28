@@ -59,26 +59,13 @@ const Shop = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("*")
+        .select("*, courses(slug)")
         .eq("is_active", true)
         .order("sort_order");
       if (error) throw error;
-
-      // 補抓課程封面
-      const ids = (data || []).map((p) => p.id);
-      if (ids.length === 0) return data;
-      const { data: courseCovers } = await supabase
-        .from("courses")
-        .select("product_id, cover_image, slug")
-        .in("product_id", ids);
-      const coverMap: Record<string, { cover_image: string | null; slug: string }> = {};
-      (courseCovers || []).forEach((c) => {
-        if (c.product_id) coverMap[c.product_id] = { cover_image: c.cover_image, slug: c.slug };
-      });
-      return (data || []).map((p) => ({
+      return (data || []).map((p: any) => ({
         ...p,
-        cover_image: coverMap[p.id]?.cover_image ?? null,
-        slug: p.slug || coverMap[p.id]?.slug || null,
+        slug: p.slug || p.courses?.[0]?.slug || null,
       }));
     },
   });

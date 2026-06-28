@@ -20,7 +20,7 @@ interface Chapter {
 const MemberCourse = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { user, loading: authLoading, getIdToken } = useAuth();
+  const { user, loading: authLoading, getIdToken, isAdmin } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
 
@@ -51,11 +51,15 @@ const MemberCourse = () => {
       const chapters = (ch as Chapter[]) || [];
       setChapters(chapters);
 
-      const token = await getIdToken();
-      const { has_access } = await apiPost<{ has_access: boolean }>(
-        "/course-access", { course_id: (c as Course).id }, token || undefined
-      );
-      setHasAccess(has_access);
+      if (isAdmin) {
+        setHasAccess(true);
+      } else {
+        const token = await getIdToken();
+        const { has_access } = await apiPost<{ has_access: boolean }>(
+          "/course-access", { course_id: (c as Course).id }, token || undefined
+        );
+        setHasAccess(has_access);
+      }
       setActiveId(chapters[0]?.id || null);
       setLoading(false);
     })();

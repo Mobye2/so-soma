@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CognitoUserPool,
   CognitoUser,
@@ -26,11 +26,15 @@ interface AuthUser {
   sub: string;
 }
 
+const isAdminFromPayload = (payload: any) =>
+  Array.isArray(payload["cognito:groups"]) &&
+  payload["cognito:groups"].includes("admin");
+
 export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [supabaseToken, _setSupabaseToken] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCognitoUser, setPendingCognitoUser] = useState<CognitoUser | null>(null);
 
   const syncAuth = async (cognitoJwt: string): Promise<string | null> => {
@@ -64,6 +68,7 @@ export const useAuth = () => {
       const payload = session.getIdToken().decodePayload();
       const currentUser = { email: payload.email, sub: payload.sub };
       setUser(currentUser);
+      setIsAdmin(isAdminFromPayload(payload));
 
       await syncAuth(session.getIdToken().getJwtToken());
 
@@ -87,6 +92,7 @@ export const useAuth = () => {
           const payload = session.getIdToken().decodePayload();
           const currentUser = { email: payload.email, sub: payload.sub };
           setUser(currentUser);
+          setIsAdmin(isAdminFromPayload(payload));
 
           await syncAuth(session.getIdToken().getJwtToken());
 
@@ -115,6 +121,7 @@ export const useAuth = () => {
           const payload = session.getIdToken().decodePayload();
           const currentUser = { email: payload.email, sub: payload.sub };
           setUser(currentUser);
+          setIsAdmin(isAdminFromPayload(payload));
 
           await syncAuth(session.getIdToken().getJwtToken());
 
@@ -186,7 +193,7 @@ export const useAuth = () => {
     const cognitoUser = userPool.getCurrentUser();
     cognitoUser?.signOut();
     setSupabaseToken(null);
-    _setSupabaseToken(null);
+    setIsAdmin(false);
     setUser(null);
     setProfile(null);
   };
@@ -202,5 +209,5 @@ export const useAuth = () => {
     });
   };
 
-  return { user, profile, loading, db: supabase, signIn, signUp, confirmSignUp, signOut, completeNewPassword, needsNewPassword: !!pendingCognitoUser, forgotPassword, confirmForgotPassword, getIdToken };
+  return { user, profile, loading, isAdmin, db: supabase, signIn, signUp, confirmSignUp, signOut, completeNewPassword, needsNewPassword: !!pendingCognitoUser, forgotPassword, confirmForgotPassword, getIdToken };
 };

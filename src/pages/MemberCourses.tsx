@@ -17,7 +17,7 @@ interface CourseRow {
 }
 
 const MemberCourses = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [accessIds, setAccessIds] = useState<Set<string>>(new Set());
@@ -37,11 +37,15 @@ const MemberCourses = () => {
         .order("created_at", { ascending: false });
       setCourses((data as CourseRow[]) || []);
 
-      const { data: access } = await supabase
-        .from("user_course_access")
-        .select("course_id")
-        .eq("user_id", user.sub);
-      setAccessIds(new Set((access || []).map((a) => a.course_id)));
+      if (isAdmin) {
+        setAccessIds(new Set((data as CourseRow[] || []).map((c) => c.id)));
+      } else {
+        const { data: access } = await supabase
+          .from("user_course_access")
+          .select("course_id")
+          .eq("user_id", user.sub);
+        setAccessIds(new Set((access || []).map((a) => a.course_id)));
+      }
 
       const { data: previews } = await supabase
         .from("course_chapters")

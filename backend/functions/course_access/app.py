@@ -3,6 +3,7 @@ import os
 import time
 import base64
 import urllib.request
+from datetime import datetime, timezone
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -56,7 +57,8 @@ def verify_token(token):
     if payload.get("exp", 0) < time.time():
         raise ValueError("Token expired")
 
-    return payload["sub"]
+    groups = payload.get("cognito:groups", [])
+    return payload["sub"], "admin" in groups
 
 
 def handler(event, context):
@@ -68,7 +70,7 @@ def handler(event, context):
         return cors(401, {"error": "Missing token"})
 
     try:
-        user_id = verify_token(auth_header[7:])
+        user_id, is_admin = verify_token(auth_header[7:])
     except Exception as e:
         return cors(401, {"error": str(e)})
 
@@ -77,7 +79,12 @@ def handler(event, context):
     if not course_id:
         return cors(400, {"error": "course_id required"})
 
-    url = f"{SUPABASE_URL}/rest/v1/course_enrollments?user_id=eq.{user_id}&course_id=eq.{course_id}&select=id,expires_at"
+    # Admin 直接有所有課程存取權
+    if is_admin:
+        return cors(200, {"has_access": True})
+
+    # 查 user_course_access
+    url = f"{SUPABASE_URL}/rest/v1/user_course_access?user_id=eq.{user_id}&course_id=eq.{course_id}&select=id,expires_at"
     req = urllib.request.Request(url, headers={
         "apikey": SUPABASE_KEY,
         "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -85,7 +92,6 @@ def handler(event, context):
     with urllib.request.urlopen(req, timeout=10) as r:
         rows = json.loads(r.read())
 
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
     has_access = False
     for row in rows:

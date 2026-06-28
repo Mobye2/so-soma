@@ -15,6 +15,8 @@ const poolData = {
 
 export const userPool = new CognitoUserPool(poolData);
 
+let _syncAuthPromise: Promise<string | null> | null = null;
+
 interface Profile {
   display_name: string | null;
   phone: string | null;
@@ -38,18 +40,24 @@ export const useAuth = () => {
   const [pendingCognitoUser, setPendingCognitoUser] = useState<CognitoUser | null>(null);
 
   const syncAuth = async (cognitoJwt: string): Promise<string | null> => {
-    try {
-      const { supabase_token } = await apiPost<{ supabase_token: string }>(
-        "/sync-auth",
-        {},
-        cognitoJwt
-      );
-      setSupabaseToken(supabase_token);
-      return supabase_token;
-    } catch (err) {
-      console.error("Failed to sync auth:", err);
-      return null;
-    }
+    if (_syncAuthPromise) return _syncAuthPromise;
+    _syncAuthPromise = (async () => {
+      try {
+        const { supabase_token } = await apiPost<{ supabase_token: string }>(
+          "/sync-auth",
+          {},
+          cognitoJwt
+        );
+        setSupabaseToken(supabase_token);
+        return supabase_token;
+      } catch (err) {
+        console.error("Failed to sync auth:", err);
+        return null;
+      } finally {
+        _syncAuthPromise = null;
+      }
+    })();
+    return _syncAuthPromise;
   };
 
   useEffect(() => {
@@ -67,10 +75,11 @@ export const useAuth = () => {
 
       const payload = session.getIdToken().decodePayload();
       const currentUser = { email: payload.email, sub: payload.sub };
-      setUser(currentUser);
-      setIsAdmin(isAdminFromPayload(payload));
 
       await syncAuth(session.getIdToken().getJwtToken());
+
+      setUser(currentUser);
+      setIsAdmin(isAdminFromPayload(payload));
 
       const { data } = await supabase
         .from("profiles")
@@ -91,10 +100,11 @@ export const useAuth = () => {
         onSuccess: async (session) => {
           const payload = session.getIdToken().decodePayload();
           const currentUser = { email: payload.email, sub: payload.sub };
-          setUser(currentUser);
-          setIsAdmin(isAdminFromPayload(payload));
 
           await syncAuth(session.getIdToken().getJwtToken());
+
+          setUser(currentUser);
+          setIsAdmin(isAdminFromPayload(payload));
 
           const { data } = await supabase
             .from("profiles")
@@ -120,10 +130,11 @@ export const useAuth = () => {
         onSuccess: async (session) => {
           const payload = session.getIdToken().decodePayload();
           const currentUser = { email: payload.email, sub: payload.sub };
-          setUser(currentUser);
-          setIsAdmin(isAdminFromPayload(payload));
 
           await syncAuth(session.getIdToken().getJwtToken());
+
+          setUser(currentUser);
+          setIsAdmin(isAdminFromPayload(payload));
 
           const { data } = await supabase
             .from("profiles")

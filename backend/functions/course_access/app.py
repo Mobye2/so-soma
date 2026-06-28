@@ -3,7 +3,6 @@ import os
 import time
 import base64
 import urllib.request
-from datetime import datetime, timezone
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -83,29 +82,20 @@ def handler(event, context):
     if is_admin:
         return cors(200, {"has_access": True})
 
-    # 查 user_course_access
-    url = f"{SUPABASE_URL}/rest/v1/user_course_access?user_id=eq.{user_id}&course_id=eq.{course_id}&select=id,expires_at"
-    req = urllib.request.Request(url, headers={
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-    })
+    rpc_url = f"{SUPABASE_URL}/rest/v1/rpc/check_course_access"
+    rpc_body = json.dumps({"p_user_id": user_id, "p_course_id": course_id}).encode()
+    req = urllib.request.Request(
+        rpc_url,
+        data=rpc_body,
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     with urllib.request.urlopen(req, timeout=10) as r:
-        rows = json.loads(r.read())
-
-    now = datetime.now(timezone.utc)
-    has_access = False
-    for row in rows:
-        expires = row.get("expires_at")
-        if expires is None:
-            has_access = True
-            break
-        try:
-            exp_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
-            if exp_dt > now:
-                has_access = True
-                break
-        except Exception:
-            has_access = True
-            break
-
+        result = json.loads(r.read())
+    # RPC 回傳 boolean scalar
+    has_access = result if isinstance(result, bool) else bool(result)
     return cors(200, {"has_access": has_access})

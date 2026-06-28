@@ -1,8 +1,11 @@
 # Workflow Rules
 
+## 不要使用POWERSHELL
+不要在SHELL使用 powershell ....，容易出現編碼問題
+
 ## Git Push 規則
 
-每完成一輪有意義的對話或一個階段性任務，提醒用戶執行以下步驟：
+每完成一個階段性任務，提醒用戶執行以下步驟：
 
 1. 確認變更內容
 2. 提醒用戶 commit 並 push：

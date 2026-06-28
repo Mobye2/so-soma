@@ -162,7 +162,7 @@ const MemberCourse = () => {
       <Layout>
         <div className="container-brand py-20 text-center">
           <p className="text-muted-foreground mb-4">找不到此課程</p>
-          <Button asChild variant="outline"><Link to="/member-courses">回會員課程</Link></Button>
+          <Button asChild variant="outline"><Link to="/member/purchases">回我的購買</Link></Button>
         </div>
       </Layout>
     );
@@ -188,7 +188,7 @@ const MemberCourse = () => {
       <section className="py-10 md:py-16">
         <div className="container-brand px-4">
           <Button asChild variant="ghost" size="sm" className="mb-4">
-            <Link to="/member-courses"><ArrowLeft className="w-4 h-4 mr-1" /> 會員課程</Link>
+            <Link to="/member/purchases"><ArrowLeft className="w-4 h-4 mr-1" /> 我的購買</Link>
           </Button>
           <h1 className="font-serif-tc text-2xl md:text-3xl font-semibold mb-2">{course.title}</h1>
           {course.description && <p className="text-muted-foreground mb-6">{course.description}</p>}

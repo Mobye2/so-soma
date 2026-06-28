@@ -103,6 +103,7 @@ def handler(event, context):
 
     # Parse request
     body = json.loads(event.get("body") or "{}")
+    print(f"admin-db request: {json.dumps(body, ensure_ascii=False)[:500]}")
     method = body.get("method", "GET").upper()   # GET/POST/PATCH/DELETE
     table = body.get("table")                     # e.g. "course_chapters"
     payload = body.get("payload")                 # data to write
@@ -117,6 +118,7 @@ def handler(event, context):
         params.update(filters)
 
     status, result = supabase_request(method, table, payload, params if params else None)
+    print(f"supabase {method} {table} params={params} -> {status}: {str(result)[:200]}")
 
     if status >= 400:
         return cors(status, {"error": result})

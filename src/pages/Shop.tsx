@@ -39,6 +39,7 @@ const categoryMap: Record<string, string> = {
   即時課程: "live_class",
   實體活動: "event",
   電子書: "ebook",
+  其他: "other",
 };
 
 const categoryLabels: Record<string, string> = {
@@ -46,9 +47,10 @@ const categoryLabels: Record<string, string> = {
   live_class: "即時課程",
   event: "實體活動",
   ebook: "電子書",
+  other: "其他",
 };
 
-const categories = ["全部", "線上課程", "即時課程", "實體活動", "電子書"];
+const categories = ["全部", "線上課程", "即時課程", "實體活動", "電子書", "其他"];
 
 const Shop = () => {
   const [active, setActive] = useState("全部");

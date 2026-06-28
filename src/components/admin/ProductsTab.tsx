@@ -21,12 +21,13 @@ const CATEGORIES = [
   { value: "live_class",    label: "即時課程" },
   { value: "ebook",         label: "電子書" },
   { value: "event",         label: "實體活動" },
+  { value: "other",         label: "其他" },
 ];
 
 const isCourse = (cat: string) => cat === "online_course" || cat === "live_class";
 
 const slugify = (s: string) =>
-  s.toLowerCase().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5-]/g, "").slice(0, 80) || `product-${Date.now()}`;
+  (s.toLowerCase().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5-]/g, "").slice(0, 60) || "product") + `-${Date.now()}`;
 
 interface Product {
   id: string;
@@ -40,6 +41,19 @@ interface Product {
   sort_order: number;
   slug: string;
   cover_image: string | null;
+  post_purchase_note?: string | null;
+  post_purchase_image?: string | null;
+  // ebook
+  ebook_download_url?: string | null;
+  ebook_file_format?: string | null;
+  // event
+  event_datetime?: string | null;
+  event_location?: string | null;
+  event_meeting_notes?: string | null;
+  event_notes?: string | null;
+  // live_class extras
+  live_stream_url?: string | null;
+  live_time_notes?: string | null;
   // 課程專屬（從 courses 載入）
   course_id?: string | null;
   instructor?: string;
@@ -56,6 +70,10 @@ const emptyProduct: Partial<Product> = {
   title: "", subtitle: "", description: "", price: 0,
   category: "online_course", cta_label: "立即購買",
   is_active: false, sort_order: 0, slug: "", cover_image: "",
+  post_purchase_note: "", post_purchase_image: "",
+  ebook_download_url: "", ebook_file_format: "",
+  event_datetime: "", event_location: "", event_meeting_notes: "", event_notes: "",
+  live_stream_url: "", live_time_notes: "",
   instructor: "Kaia（首席心理師）", audience: [], modules: [],
   access_days: null, live_badge: "", live_schedule: "",
   published: false, course_sort_order: 0,
@@ -79,7 +97,6 @@ const ProductsTab = () => {
       }, token || undefined);
       const list = Array.isArray(data) ? data as Product[] : [];
 
-      // 載入課程資料
       const productIds = list.map((p) => p.id);
       if (productIds.length > 0) {
         const courses = await apiPost("/admin-db", {
@@ -130,13 +147,22 @@ const ProductsTab = () => {
       sort_order: editing.sort_order ?? 0,
       slug: productSlug,
       cover_image: editing.cover_image || null,
+      post_purchase_note: editing.post_purchase_note || null,
+      post_purchase_image: editing.post_purchase_image || null,
+      ebook_download_url: editing.ebook_download_url || null,
+      ebook_file_format: editing.ebook_file_format || null,
+      event_datetime: editing.event_datetime || null,
+      event_location: editing.event_location || null,
+      event_meeting_notes: editing.event_meeting_notes || null,
+      event_notes: editing.event_notes || null,
+      live_stream_url: editing.live_stream_url || null,
+      live_time_notes: editing.live_time_notes || null,
     };
 
     try {
       const token = await getIdToken();
       let productId = editing.id;
 
-      // 儲存 product
       if (productId) {
         await apiPost("/admin-db", { method: "PATCH", table: "products", payload: productPayload, filters: { id: `eq.${productId}` } }, token || undefined);
       } else {
@@ -144,7 +170,6 @@ const ProductsTab = () => {
         if (Array.isArray(res) && res[0]) productId = res[0].id;
       }
 
-      // 課程類別：同步 courses 表
       if (isCourse(editing.category!) && productId) {
         const coursePayload = {
           title: editing.title!.trim(),
@@ -163,8 +188,18 @@ const ProductsTab = () => {
           product_id: productId,
         };
 
-        if (editing.course_id) {
-          await apiPost("/admin-db", { method: "PATCH", table: "courses", payload: coursePayload, filters: { id: `eq.${editing.course_id}` } }, token || undefined);
+        // 確認 course_id 在 DB 是否真的存在
+        let confirmedCourseId = editing.course_id;
+        if (confirmedCourseId) {
+          const existing = await apiPost("/admin-db", {
+            method: "GET",
+            table: `courses?id=eq.${confirmedCourseId}&select=id`
+          }, token || undefined);
+          if (!Array.isArray(existing) || existing.length === 0) confirmedCourseId = undefined;
+        }
+
+        if (confirmedCourseId) {
+          await apiPost("/admin-db", { method: "PATCH", table: "courses", payload: coursePayload, filters: { id: `eq.${confirmedCourseId}` } }, token || undefined);
         } else {
           await apiPost("/admin-db", { method: "POST", table: "courses", payload: coursePayload }, token || undefined);
         }
@@ -196,13 +231,31 @@ const ProductsTab = () => {
 
   const uploadCover = async (file: File) => {
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `courses/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage.from("blog-images").upload(path, file);
+    try {
+      const token = await getIdToken();
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const contentType = file.type || "image/jpeg";
+
+      // 拿 presigned URL
+      const { upload_url, public_url } = await apiPost("/upload-url", {
+        type: "image",
+        filename: `cover.${ext}`,
+        content_type: contentType,
+        folder: "products",
+      }, token || undefined);
+
+      // 直接 PUT 到 S3
+      await fetch(upload_url, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": contentType },
+      });
+
+      setEditing((p) => ({ ...p!, cover_image: public_url }));
+    } catch (err: any) {
+      toast({ title: "上傳失敗", description: err.message, variant: "destructive" });
+    }
     setUploading(false);
-    if (error) return toast({ title: "上傳失敗", description: error.message, variant: "destructive" });
-    const { data } = supabase.storage.from("blog-images").getPublicUrl(path);
-    setEditing((p) => ({ ...p!, cover_image: data.publicUrl }));
   };
 
   const updateList = (key: "audience" | "modules", i: number, v: string) => {
@@ -219,6 +272,8 @@ const ProductsTab = () => {
   };
 
   const catLabel = (cat: string) => CATEGORIES.find((c) => c.value === cat)?.label || cat;
+  const e = (key: keyof Product) => (ev: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setEditing({ ...editing!, [key]: ev.target.value });
 
   return (
     <Card>
@@ -288,41 +343,41 @@ const ProductsTab = () => {
 
                 <div>
                   <Label>商品名稱 *</Label>
-                  <Input value={editing.title || ""} onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
+                  <Input value={editing.title || ""} onChange={e("title")} />
                 </div>
 
                 <div>
                   <Label>副標題</Label>
-                  <Input value={editing.subtitle || ""} onChange={(e) => setEditing({ ...editing, subtitle: e.target.value })} placeholder="例：自學課程｜預錄隨選" />
+                  <Input value={editing.subtitle || ""} onChange={e("subtitle")} placeholder="例：自學課程｜預錄隨選" />
                 </div>
 
                 <div>
                   <Label>商品描述</Label>
-                  <Textarea value={editing.description || ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} rows={3} />
+                  <Textarea value={editing.description || ""} onChange={e("description")} rows={3} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>售價（NT$）</Label>
-                    <Input type="number" min={0} value={editing.price ?? ""} onChange={(e) => setEditing({ ...editing, price: parseInt(e.target.value) || 0 })} />
+                    <Input type="number" min={0} value={editing.price ?? ""} onChange={(ev) => setEditing({ ...editing, price: parseInt(ev.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label>排序（小到大）</Label>
-                    <Input type="number" value={editing.sort_order ?? 0} onChange={(e) => setEditing({ ...editing, sort_order: parseInt(e.target.value) || 0 })} />
+                    <Input type="number" value={editing.sort_order ?? 0} onChange={(ev) => setEditing({ ...editing, sort_order: parseInt(ev.target.value) || 0 })} />
                   </div>
                 </div>
 
                 <div>
                   <Label>網址代稱（slug）</Label>
-                  <Input value={editing.slug || ""} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} placeholder="留空自動生成" />
+                  <Input value={editing.slug || ""} onChange={e("slug")} placeholder="留空自動生成" />
                 </div>
 
                 <div>
                   <Label>封面圖片</Label>
                   <div className="flex gap-2 items-center mt-1">
-                    <Input value={editing.cover_image || ""} onChange={(e) => setEditing({ ...editing, cover_image: e.target.value })} placeholder="圖片網址或上傳" />
+                    <Input value={editing.cover_image || ""} onChange={e("cover_image")} placeholder="圖片網址或上傳" />
                     <label>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.target.value = ""; }} />
+                      <input type="file" accept="image/*" className="hidden" onChange={(ev) => { const f = ev.target.files?.[0]; if (f) uploadCover(f); ev.target.value = ""; }} />
                       <Button type="button" variant="outline" size="sm" disabled={uploading} asChild>
                         <span className="cursor-pointer"><Upload className="w-4 h-4 mr-1" />{uploading ? "上傳中" : "上傳"}</span>
                       </Button>
@@ -336,7 +391,60 @@ const ProductsTab = () => {
                   <Label>在商店上架顯示</Label>
                 </div>
 
-                {/* 課程專屬欄位 */}
+                {/* 其他 */}
+                {editing.category === "other" && (
+                  <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                    <p className="text-sm font-medium">購買設定</p>
+                    <div>
+                      <Label>購買說明</Label>
+                      <Textarea value={editing.post_purchase_note || ""} onChange={e("post_purchase_note")} rows={3} placeholder="購買後會員頁顯示的說明文字" />
+                    </div>
+                  </div>
+                )}
+
+                {/* 電子書 */}
+                {editing.category === "ebook" && (
+                  <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                    <p className="text-sm font-medium">電子書設定</p>
+                    <div>
+                      <Label>下載連結 *</Label>
+                      <Input value={editing.ebook_download_url || ""} onChange={e("ebook_download_url")} placeholder="https://..." />
+                    </div>
+                    <div>
+                      <Label>檔案格式說明</Label>
+                      <Input value={editing.ebook_file_format || ""} onChange={e("ebook_file_format")} placeholder="例：PDF、ePub" />
+                    </div>
+                    <div>
+                      <Label>購買說明</Label>
+                      <Textarea value={editing.post_purchase_note || ""} onChange={e("post_purchase_note")} rows={2} placeholder="選填，顯示在下載連結旁" />
+                    </div>
+                  </div>
+                )}
+
+                {/* 實體活動 */}
+                {editing.category === "event" && (
+                  <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
+                    <p className="text-sm font-medium">活動設定</p>
+                    <div>
+                      <Label>活動日期時間 *</Label>
+                      <Input value={editing.event_datetime || ""} onChange={e("event_datetime")} placeholder="例：2026/08/15（六）14:00–17:00" />
+                    </div>
+                    <div>
+                      <Label>活動地點 *</Label>
+                      <Input value={editing.event_location || ""} onChange={e("event_location")} placeholder="例：台中市西區 XX 路 XX 號" />
+                    </div>
+                    <div>
+                      <Label>集合說明</Label>
+                      <Input value={editing.event_meeting_notes || ""} onChange={e("event_meeting_notes")} placeholder="例：請提前 10 分鐘到場" />
+                    </div>
+                    <div>
+                      <Label>注意事項</Label>
+                      <Textarea value={editing.event_notes || ""} onChange={e("event_notes")} rows={2} placeholder="例：請穿著舒適衣物、自備水" />
+                    </div>
+                  </div>
+                )}
+
+                {/* 課程類 */}
                 {isCourse(editing.category || "") && (
                   <div className="border border-border rounded-lg p-4 space-y-4 bg-muted/30">
                     <p className="text-sm font-medium">課程設定</p>
@@ -344,25 +452,35 @@ const ProductsTab = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label>講師</Label>
-                        <Input value={editing.instructor || ""} onChange={(e) => setEditing({ ...editing, instructor: e.target.value })} />
+                        <Input value={editing.instructor || ""} onChange={e("instructor")} />
                       </div>
                       <div>
                         <Label>觀看期限（天）</Label>
                         <Input type="number" min={1} value={editing.access_days ?? ""}
-                          onChange={(e) => setEditing({ ...editing, access_days: e.target.value ? parseInt(e.target.value) : null })}
+                          onChange={(ev) => setEditing({ ...editing, access_days: ev.target.value ? parseInt(ev.target.value) : null })}
                           placeholder="留空 = 永久" />
                       </div>
                     </div>
 
                     {editing.category === "live_class" && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label>即時課標籤</Label>
-                          <Input value={editing.live_badge || ""} onChange={(e) => setEditing({ ...editing, live_badge: e.target.value })} placeholder="例：每月方案" />
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <Label>即時課標籤</Label>
+                            <Input value={editing.live_badge || ""} onChange={e("live_badge")} placeholder="例：每月方案" />
+                          </div>
+                          <div>
+                            <Label>上課時段</Label>
+                            <Input value={editing.live_schedule || ""} onChange={e("live_schedule")} placeholder="例：每週固定時段" />
+                          </div>
                         </div>
                         <div>
-                          <Label>上課時段</Label>
-                          <Input value={editing.live_schedule || ""} onChange={(e) => setEditing({ ...editing, live_schedule: e.target.value })} placeholder="例：每週固定時段" />
+                          <Label>直播連結</Label>
+                          <Input value={editing.live_stream_url || ""} onChange={e("live_stream_url")} placeholder="Zoom / Google Meet URL" />
+                        </div>
+                        <div>
+                          <Label>直播時間說明</Label>
+                          <Input value={editing.live_time_notes || ""} onChange={e("live_time_notes")} placeholder="例：每週四晚上 8:00–9:00" />
                         </div>
                       </div>
                     )}
@@ -380,7 +498,7 @@ const ProductsTab = () => {
                       <div className="space-y-2 mt-1">
                         {(editing.audience || []).map((a, i) => (
                           <div key={i} className="flex gap-2">
-                            <Input value={a} onChange={(e) => updateList("audience", i, e.target.value)} />
+                            <Input value={a} onChange={(ev) => updateList("audience", i, ev.target.value)} />
                             <Button type="button" size="icon" variant="ghost" onClick={() => removeList("audience", i)}><X className="w-4 h-4" /></Button>
                           </div>
                         ))}
@@ -395,7 +513,7 @@ const ProductsTab = () => {
                       <div className="space-y-2 mt-1">
                         {(editing.modules || []).map((m, i) => (
                           <div key={i} className="flex gap-2">
-                            <Input value={m} onChange={(e) => updateList("modules", i, e.target.value)} />
+                            <Input value={m} onChange={(ev) => updateList("modules", i, ev.target.value)} />
                             <Button type="button" size="icon" variant="ghost" onClick={() => removeList("modules", i)}><X className="w-4 h-4" /></Button>
                           </div>
                         ))}

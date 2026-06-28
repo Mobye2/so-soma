@@ -8,6 +8,7 @@ from botocore.exceptions import ClientError
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 VIDEO_BUCKET = os.environ["VIDEO_BUCKET"]
+ASSETS_BUCKET = os.environ.get("ASSETS_BUCKET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-east-2")
 COGNITO_USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
 UPLOAD_URL_EXPIRES = int(os.environ.get("UPLOAD_URL_EXPIRES", "900"))  # 15 min
@@ -86,22 +87,33 @@ def handler(event, context):
         return cors(401, {"error": f"Invalid token: {e}"})
 
     body = json.loads(event.get("body") or "{}")
+    upload_type = body.get("type", "video")  # "video" or "image"
     course_id = body.get("course_id")
     chapter_id = body.get("chapter_id")
-    filename = body.get("filename", "video.mp4")
+    filename = body.get("filename", "file")
     content_type = body.get("content_type", "video/mp4")
 
-    if not course_id or not chapter_id:
-        return cors(400, {"error": "course_id and chapter_id required"})
-
-    ext = filename.rsplit(".", 1)[-1] if "." in filename else "mp4"
-    s3_key = f"courses/{course_id}/{chapter_id}.{ext}"
+    # 圖片上傳
+    if upload_type == "image":
+        if not ASSETS_BUCKET:
+            return cors(500, {"error": "ASSETS_BUCKET not configured"})
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+        s3_key = f"images/{body.get('folder', 'products')}/{int(__import__('time').time())}-{__import__('random').randint(1000,9999)}.{ext}"
+        bucket = ASSETS_BUCKET
+        public_url = f"https://{os.environ.get('ASSETS_CF_DOMAIN', '')}/{s3_key}"
+    else:
+        if not course_id or not chapter_id:
+            return cors(400, {"error": "course_id and chapter_id required"})
+        ext = filename.rsplit(".", 1)[-1] if "." in filename else "mp4"
+        s3_key = f"courses/{course_id}/{chapter_id}.{ext}"
+        bucket = VIDEO_BUCKET
+        public_url = None
 
     try:
         upload_url = s3.generate_presigned_url(
             "put_object",
             Params={
-                "Bucket": VIDEO_BUCKET,
+                "Bucket": bucket,
                 "Key": s3_key,
                 "ContentType": content_type,
             },
@@ -110,8 +122,7 @@ def handler(event, context):
     except ClientError as e:
         return cors(500, {"error": str(e)})
 
-    return cors(200, {
-        "upload_url": upload_url,
-        "s3_key": s3_key,
-        "expires_in": UPLOAD_URL_EXPIRES,
-    })
+    resp = {"upload_url": upload_url, "s3_key": s3_key, "expires_in": UPLOAD_URL_EXPIRES}
+    if public_url:
+        resp["public_url"] = public_url
+    return cors(200, resp)

@@ -46,24 +46,34 @@ def grant_course_access(supabase: Client, order_id: str):
         product_id = item.get("product_id")
         if not product_id:
             continue
+
+        # 查 access_days（透過 courses 表）
         course = supabase.table("courses").select("id, access_days").eq(
             "product_id", product_id
         ).execute().data
-        if not course:
-            continue
-        course_id = course[0]["id"]
-        access_days = course[0].get("access_days")
+        access_days = course[0].get("access_days") if course else None
         expires_at = None
         if access_days:
             expires_at = (datetime.now(timezone.utc) + timedelta(days=access_days)).isoformat()
 
-        supabase.table("user_course_access").upsert({
+        # 新：寫入 user_product_access
+        supabase.table("user_product_access").upsert({
             "user_id": user_id,
-            "course_id": course_id,
+            "product_id": product_id,
             "order_id": order_id,
             "expires_at": expires_at,
-        }, on_conflict="user_id,course_id").execute()
-        print(f"Granted access: user={user_id} course={course_id} expires={expires_at}")
+        }, on_conflict="user_id,product_id").execute()
+        print(f"Granted product access: user={user_id} product={product_id} expires={expires_at}")
+
+        # 舊：雙寫 user_course_access（過渡期保留）
+        if course:
+            course_id = course[0]["id"]
+            supabase.table("user_course_access").upsert({
+                "user_id": user_id,
+                "course_id": course_id,
+                "order_id": order_id,
+                "expires_at": expires_at,
+            }, on_conflict="user_id,course_id").execute()
 
 
 def send_payment_success_email(supabase: Client, order_id: str):

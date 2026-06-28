@@ -253,6 +253,69 @@ Resources:
               Action: kms:Decrypt
               Resource: !Sub "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${CognitoKmsKeyId}"
 
+  # ─── Assets (images) ────────────────────────────────────────────────────────
+
+  AssetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "solis-assets-${AWS::AccountId}"
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ['*']
+            AllowedMethods: [GET, PUT]
+            AllowedHeaders: ['*']
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  AssetsOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: solis-assets-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  AssetsDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        PriceClass: PriceClass_200
+        Comment: solis assets CDN
+        Origins:
+          - Id: AssetsBucketOrigin
+            DomainName: !GetAtt AssetsBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt AssetsOAC.Id
+        DefaultCacheBehavior:
+          TargetOriginId: AssetsBucketOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+
+  AssetsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AssetsBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${AssetsBucket}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${AssetsDistribution}"
+
   # ─── Phase 6: Video Streaming ───────────────────────────────────────────────
 
   # S3: Raw upload bucket (private, lifecycle delete after 7 days)
@@ -609,6 +672,8 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
           VIDEO_BUCKET: !Ref VideoRawBucket
+          ASSETS_BUCKET: !Ref AssetsBucket
+          ASSETS_CF_DOMAIN: !GetAtt AssetsDistribution.DomainName
           COGNITO_REGION: !Sub "${AWS::Region}"
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
           UPLOAD_URL_EXPIRES: "900"
@@ -617,7 +682,9 @@ Resources:
           Statement:
             - Effect: Allow
               Action: s3:PutObject
-              Resource: !Sub "arn:aws:s3:::${VideoRawBucket}/*"
+              Resource:
+                - !Sub "arn:aws:s3:::${VideoRawBucket}/*"
+                - !Sub "arn:aws:s3:::${AssetsBucket}/*"
       Events:
         Api:
           Type: Api
@@ -682,6 +749,10 @@ Parameters:
     Description: Security Group ID for AWS Batch Fargate
 
 Outputs:
+  AssetsBucketName:
+    Value: !Ref AssetsBucket
+  AssetsDistributionDomain:
+    Value: !GetAtt AssetsDistribution.DomainName
   ApiUrl:
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
   EmailQueueUrl:

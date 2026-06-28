@@ -34,6 +34,7 @@ const categoryLabels: Record<string, string> = {
   live_class: "即時課程",
   event: "實體活動",
   ebook: "電子書",
+  other: "其他",
 };
 
 const ShopProduct = () => {

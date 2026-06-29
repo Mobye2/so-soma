@@ -394,3 +394,37 @@
   .quiz-scope .quiz-container { padding: 1.25rem 1rem 2.5rem; }
   .quiz-scope .q-title { font-size: 16px; }
 }
+
+/* ============================================================
+   Tiptap Editor Styles
+   ============================================================ */
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  table-layout: fixed;
+}
+.tiptap table td,
+.tiptap table th {
+  border: 1px solid hsl(var(--border));
+  padding: 8px 12px;
+  min-width: 80px;
+  vertical-align: top;
+}
+.tiptap table th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+  text-align: left;
+}
+.tiptap table .selectedCell {
+  background: hsl(var(--primary) / 0.1);
+}
+
+/* Placeholder */
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground) / 0.5);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}

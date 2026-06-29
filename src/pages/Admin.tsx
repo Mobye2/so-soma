@@ -120,7 +120,7 @@ const Admin = () => {
   return (
     <Layout>
       <section className="py-12 bg-background min-h-screen">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto px-6 md:px-10">
           <h1 className="text-3xl font-bold text-foreground mb-8">訂單管理後台</h1>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

@@ -227,7 +227,7 @@ const Navbar = () => {
                       </Link>
                       <Link to="/member/purchases" onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted">
-                        <BookOpen className="w-4 h-4" /> 學習資源
+                        <BookOpen className="w-4 h-4" /> 我的學習資源
                       </Link>
                       {isAdmin && (
                         <Link to="/admin" onClick={() => setUserMenuOpen(false)}

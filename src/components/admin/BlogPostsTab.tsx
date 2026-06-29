@@ -47,6 +47,8 @@ const BlogPostsTab = () => {
   const [uploading, setUploading] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
+  const [editorWidthClass, setEditorWidthClass] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const autoSaveTimer = useRef<number | null>(null);
 
   const load = async () => {
@@ -193,6 +195,12 @@ const BlogPostsTab = () => {
     setEditing((p) => ({ ...p!, cover_image: data.publicUrl }));
   };
 
+  const updateCategory = async (id: string, category: string) => {
+    await supabase.from("blog_posts").update({ category }).eq("id", id);
+    setPosts((prev) => prev.map((p) => p.id === id ? { ...p, category } : p));
+    setEditingCategoryId(null);
+  };
+
   const openNew = () => { setAutoSavedAt(null); setEditing(empty); };
   const openEdit = (p: Post) => { setAutoSavedAt(null); setEditing(p); };
   const closeEditor = () => { setEditing(null); setShowPublish(false); load(); };
@@ -228,7 +236,26 @@ const BlogPostsTab = () => {
                 {posts.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="max-w-[300px] truncate">{p.title}</TableCell>
-                    <TableCell>{p.category}</TableCell>
+                    <TableCell>
+                      {editingCategoryId === p.id ? (
+                        <select autoFocus
+                          value={p.category}
+                          onChange={(e) => updateCategory(p.id, e.target.value)}
+                          onBlur={() => setEditingCategoryId(null)}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setEditingCategoryId(p.id)}
+                          className="flex items-center gap-1.5 text-sm hover:text-secondary transition-colors"
+                        >
+                          {p.category}
+                          <Pencil className="w-3 h-3 opacity-60" />
+                        </button>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {(() => {
                         const scheduled = p.published && p.published_at && new Date(p.published_at) > new Date();
@@ -294,6 +321,13 @@ const BlogPostsTab = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <select
+                      value={editing.category || CATEGORIES[0]}
+                      onChange={(e) => setEditing({ ...editing, category: e.target.value })}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm text-muted-foreground"
+                    >
+                      {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                    </select>
                     <Button variant="ghost" size="sm" onClick={handleSaveDraft} disabled={saving}>
                       存為草稿
                     </Button>
@@ -305,18 +339,21 @@ const BlogPostsTab = () => {
 
                 {/* Editor canvas */}
                 <div className="flex-1 overflow-y-auto">
-                  <div className="max-w-3xl mx-auto px-6 md:px-8 pt-12 pb-24">
-                    <input
-                      type="text"
-                      value={editing.title || ""}
-                      onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                      placeholder="請輸入文章名稱"
-                      className="w-full text-3xl md:text-4xl font-bold font-serif-tc bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 mb-8"
-                    />
+                  <div className="pt-12 pb-24 px-4">
+                    <div className={`mx-auto px-8 transition-all duration-300 ${editorWidthClass}`}>
+                      <input
+                        type="text"
+                        value={editing.title || ""}
+                        onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                        placeholder="請輸入文章名稱"
+                        className="w-full text-3xl md:text-4xl font-bold font-serif-tc bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 mb-8"
+                      />
+                    </div>
                     <RichTextEditor
                       value={editing.content || ""}
                       onChange={(html) => setEditing({ ...editing, content: html })}
                       minHeightClass="min-h-[65vh]"
+                      onWidthClassChange={setEditorWidthClass}
                     />
                   </div>
                 </div>

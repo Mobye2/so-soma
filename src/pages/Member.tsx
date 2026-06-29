@@ -1,9 +1,9 @@
 import { useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Package, Lock, Loader2, BookOpen } from "lucide-react";
+import { User, Package, Lock, Loader2 } from "lucide-react";
 import ProfileTab from "@/components/member/ProfileTab";
 import PasswordTab from "@/components/member/PasswordTab";
 import OrdersTab from "@/components/member/OrdersTab";
@@ -52,12 +52,7 @@ const Member = () => {
                 <Package className="w-4 h-4" />
                 訂單記錄
               </TabsTrigger>
-              <TabsTrigger value="resources" className="gap-1.5" asChild>
-                <Link to="/member/purchases">
-                  <BookOpen className="w-4 h-4" />
-                  學習資源
-                </Link>
-              </TabsTrigger>
+
             </TabsList>
 
             <TabsContent value="profile">

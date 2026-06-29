@@ -33,29 +33,22 @@ interface QuizResult {
   created_at: string;
 }
 
-interface SubscribersTabProps {
-  defaultValue?: "newsletter" | "launch" | "quiz";
-}
-
-const SubscribersTab = ({ defaultValue = "newsletter" }: SubscribersTabProps) => {
+const SubscribersTab = () => {
   const { getIdToken } = useAuth();
   const [newsletter, setNewsletter] = useState<Newsletter[]>([]);
   const [launch, setLaunch] = useState<LaunchNotify[]>([]);
-  const [quiz, setQuiz] = useState<QuizResult[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetch = async () => {
       try {
         const token = await getIdToken();
-        const [n, l, q] = await Promise.all([
+        const [n, l] = await Promise.all([
           apiPost("/admin-db", { method: "GET", table: "newsletter_subscribers?order=created_at.desc" }, token || undefined),
           apiPost("/admin-db", { method: "GET", table: "launch_notify_subscribers?order=created_at.desc" }, token || undefined),
-          apiPost("/admin-db", { method: "GET", table: "quiz_results?order=created_at.desc" }, token || undefined),
         ]);
         if (n) setNewsletter(Array.isArray(n) ? n as Newsletter[] : []);
         if (l) setLaunch(Array.isArray(l) ? l as LaunchNotify[] : []);
-        if (q) setQuiz(Array.isArray(q) ? q as QuizResult[] : []);
       } catch (e) {
         console.error("Failed to load subscribers:", e);
       }
@@ -83,11 +76,10 @@ const SubscribersTab = ({ defaultValue = "newsletter" }: SubscribersTabProps) =>
   };
 
   return (
-    <Tabs defaultValue={defaultValue}>
+    <Tabs defaultValue="newsletter">
       <TabsList className="mb-4">
         <TabsTrigger value="newsletter">電子報訂閱（{newsletter.length}）</TabsTrigger>
         <TabsTrigger value="launch">上架通知（{launch.length}）</TabsTrigger>
-        <TabsTrigger value="quiz">測驗結果（{quiz.length}）</TabsTrigger>
       </TabsList>
 
       <TabsContent value="newsletter">
@@ -178,56 +170,6 @@ const SubscribersTab = ({ defaultValue = "newsletter" }: SubscribersTabProps) =>
                             <Badge variant="secondary">待通知</Badge>
                           )}
                         </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="quiz">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">神經系統測驗結果</CardTitle>
-            <button
-              onClick={() => exportCsv(quiz as unknown as Record<string, unknown>[], "quiz_results.csv")}
-              className="text-sm text-primary hover:underline"
-            >
-              匯出 CSV
-            </button>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <p className="p-6 text-muted-foreground">載入中...</p>
-            ) : quiz.length === 0 ? (
-              <p className="p-6 text-muted-foreground">目前沒有測驗結果</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>填寫時間</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>主要狀態</TableHead>
-                      <TableHead>交感 %</TableHead>
-                      <TableHead>背側 %</TableHead>
-                      <TableHead>腹側 %</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {quiz.map((q) => (
-                      <TableRow key={q.id}>
-                        <TableCell className="whitespace-nowrap">
-                          {new Date(q.created_at).toLocaleString("zh-TW")}
-                        </TableCell>
-                        <TableCell>{q.email || "-"}</TableCell>
-                        <TableCell>{q.state_title || q.state_name || "-"}</TableCell>
-                        <TableCell>{q.pct_sym ?? "-"}</TableCell>
-                        <TableCell>{q.pct_dor ?? "-"}</TableCell>
-                        <TableCell>{q.pct_ven ?? "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

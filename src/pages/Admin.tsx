@@ -15,7 +15,8 @@ import ProductsTab from "@/components/admin/ProductsTab";
 import SEOMetricsTab from "@/components/admin/SEOMetricsTab";
 import SubscribersTab from "@/components/admin/SubscribersTab";
 import CourseEnrollmentsTab from "@/components/admin/CourseEnrollmentsTab";
-import { Cloud, ChevronDown } from "lucide-react";
+import MembersTab from "@/components/admin/MembersTab";
+import { ChevronDown } from "lucide-react";
 
 interface OrderItem {
   id: string;
@@ -140,11 +141,8 @@ const Admin = () => {
               <TabsTrigger value="enrollments">課程授權</TabsTrigger>
               <TabsTrigger value="seo">SEO 監控</TabsTrigger>
               <TabsTrigger value="subscribers">訂閱名單</TabsTrigger>
-              <TabsTrigger value="quiz-results" className="gap-1.5">
-                <Cloud className="h-4 w-4" />
-                身心測驗結果
-              </TabsTrigger>
-              <TabsTrigger value="admins">管理員</TabsTrigger>
+              <TabsTrigger value="members">會員名單</TabsTrigger>
+              <TabsTrigger value="admins">權限管理</TabsTrigger>
             </TabsList>
 
             <TabsContent value="orders">
@@ -256,8 +254,8 @@ const Admin = () => {
               <SubscribersTab />
             </TabsContent>
 
-            <TabsContent value="quiz-results">
-              <SubscribersTab defaultValue="quiz" />
+            <TabsContent value="members">
+              <MembersTab />
             </TabsContent>
 
             <TabsContent value="admins">

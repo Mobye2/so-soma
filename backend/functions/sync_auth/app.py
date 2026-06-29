@@ -86,7 +86,7 @@ def ensure_supabase_user(user_id: str, email: str) -> str:
             raise
         print(f"[ensure_user] id={user_id} not found, checking email...")
 
-    # 2. 查 email 是否已被別的 id 佔用
+    # 2. 查 email 是否已被別的 id 佔用 → 警告並回傳錯誤，不允許相同 email 用不同 id
     search_url = f"{SUPABASE_URL}/auth/v1/admin/users?email={urllib.parse.quote(email)}&limit=1"
     search_req = urllib.request.Request(search_url, headers={
         "apikey": SUPABASE_SERVICE_KEY,
@@ -96,24 +96,13 @@ def ensure_supabase_user(user_id: str, email: str) -> str:
         search_res = json.loads(urllib.request.urlopen(search_req).read())
         users = search_res.get("users", [])
         if users:
-            existing_id = users[0]["id"]
-            print(f"[ensure_user] email already used by id={existing_id}, updating to cognito sub...")
-            # 更新 id 為 Cognito sub
-            update_url = f"{SUPABASE_URL}/auth/v1/admin/users/{existing_id}"
-            update_body = json.dumps({"id": user_id}, separators=(",", ":")).encode()
-            update_req = urllib.request.Request(update_url, data=update_body, method="PUT", headers={
-                "apikey": SUPABASE_SERVICE_KEY,
-                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-                "Content-Type": "application/json",
-            })
-            try:
-                urllib.request.urlopen(update_req)
-                print(f"[ensure_user] updated id to {user_id}")
-            except urllib.error.HTTPError as e:
-                print(f"[ensure_user] update id failed: {e.code} {e.read().decode()[:200]}")
-                # update id 不支援的話，直接用舊 id 來 generate token
-                return existing_id
-            return user_id
+            exact = [u for u in users if u["email"] == email]
+            if exact:
+                existing_id = exact[0]["id"]
+                print(f"[ensure_user] CONFLICT: email={email} already used by supabase_id={existing_id}, cognito_sub={user_id}")
+                raise ValueError(f"Email {email} is already associated with a different Supabase user id ({existing_id}). Please contact support.")
+    except ValueError:
+        raise
     except Exception as e:
         print(f"[ensure_user] search failed: {e}")
 
@@ -138,8 +127,8 @@ def ensure_supabase_user(user_id: str, email: str) -> str:
     return user_id
 
 
-def get_supabase_token(email: str) -> str | None:
-    """generate_link + verify 取得 ES256 signed token"""
+def get_supabase_token(email: str) -> dict | None:
+    """generate_link + verify 取得 ES256 signed token + refresh token"""
     import urllib.parse
 
     url = f"{SUPABASE_URL}/auth/v1/admin/generate_link"
@@ -163,9 +152,10 @@ def get_supabase_token(email: str) -> str | None:
             "Content-Type": "application/json",
         })
         verify_res = json.loads(urllib.request.urlopen(verify_req).read())
-        token = verify_res.get("access_token")
-        print(f"[verify] token={'ok prefix='+token[:20] if token else 'MISSING'}")
-        return token
+        access_token = verify_res.get("access_token")
+        refresh_token = verify_res.get("refresh_token")
+        print(f"[verify] access_token={'ok' if access_token else 'MISSING'}, refresh_token={'ok' if refresh_token else 'MISSING'}")
+        return {"access_token": access_token, "refresh_token": refresh_token} if access_token and refresh_token else None
     except urllib.error.HTTPError as e:
         print(f"[get_supabase_token] error: {e.code} {e.read().decode()[:200]}")
         return None
@@ -192,14 +182,23 @@ def handler(event, context):
         # Step 1: 確保 auth.users 有正確的 user
         final_user_id = ensure_supabase_user(user_id, email)
 
-        # Step 2: 確保 profiles 有此用戶
-        result = supabase.table("profiles").select("id").eq("id", final_user_id).execute()
+        # Step 2: 確保 profiles 有此用戶，並記錄 supabase_auth_id（auth.users.id）
+        # 直接用 final_user_id 查，避免 email 搜尋拿到錯誤的 user
+        supabase_auth_id = final_user_id
+        print(f"[sync] supabase_auth_id={supabase_auth_id}")
+
+        result = supabase.table("profiles").select("id").eq("id", user_id).execute()
         if not result.data:
             supabase.table("profiles").insert({
-                "id": final_user_id,
+                "id": user_id,
                 "email": email,
-                "display_name": user_info.get("name") or None
+                "display_name": user_info.get("name") or None,
+                "supabase_auth_id": supabase_auth_id
             }).execute()
+        else:
+            supabase.table("profiles").update({
+                "supabase_auth_id": supabase_auth_id
+            }).eq("id", user_id).execute()
 
         # Step 3: 同步 admin 權限
         if is_admin:
@@ -209,12 +208,13 @@ def handler(event, context):
             }, on_conflict="user_id,role").execute()
 
         # Step 4: 取得 ES256 signed Supabase token
-        supabase_token = get_supabase_token(email)
-        if not supabase_token:
+        tokens = get_supabase_token(email)
+        if not tokens:
             return cors(500, {"error": "Failed to generate Supabase token"})
 
         return cors(200, {
-            "supabase_token": supabase_token,
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
             "user_id": final_user_id,
             "email": email,
             "is_admin": is_admin

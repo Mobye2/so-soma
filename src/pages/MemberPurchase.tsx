@@ -126,7 +126,7 @@ const MemberPurchase = () => {
       <section className="section-padding">
         <div className="container-brand max-w-4xl">
           <Button asChild variant="ghost" size="sm" className="mb-6 -ml-2">
-            <Link to="/member/purchases"><ArrowLeft className="w-4 h-4 mr-1" /> 我的購買</Link>
+            <Link to="/member/purchases"><ArrowLeft className="w-4 h-4 mr-1" /> 學習資源</Link>
           </Button>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">

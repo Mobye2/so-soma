@@ -201,7 +201,8 @@ const Checkout = () => {
                   className="w-full px-4 py-3 rounded-md bg-mist border border-border text-sm focus:outline-none focus:ring-1 focus:ring-sage"
                 />
                 <input
-                  placeholder="電話"
+                  placeholder="電話 *"
+                  required
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className="w-full px-4 py-3 rounded-md bg-mist border border-border text-sm focus:outline-none focus:ring-1 focus:ring-sage"

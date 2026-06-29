@@ -90,14 +90,14 @@ const MemberPurchases = () => {
     <Layout>
       <section className="py-20 md:py-28">
         <div className="container-brand max-w-5xl px-4">
-          <h1 className="font-serif-tc text-2xl md:text-3xl font-semibold mb-2">我的購買</h1>
+          <h1 className="font-serif-tc text-2xl md:text-3xl font-semibold mb-2">學習資源</h1>
           <p className="text-muted-foreground mb-8">您已購買的所有商品與內容。</p>
 
           {purchases.length === 0 ? (
             <Card>
               <CardContent className="p-8 text-center text-muted-foreground">
                 尚未購買任何商品。{" "}
-                <Link to="/shop" className="underline text-foreground">前往商店</Link>
+                <Link to="/shop" className="underline text-foreground">前往課程總覽</Link>
               </CardContent>
             </Card>
           ) : (

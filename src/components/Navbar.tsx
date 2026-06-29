@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X, ShoppingCart, User, LogOut, Settings, UserCircle, ChevronDown } from "lucide-react";
+import { Menu, X, ShoppingCart, User, LogOut, Settings, UserCircle, ChevronDown, BookOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,8 @@ const menuGroups: MenuGroup[] = [
   { label: "森林療癒", path: "/forest-therapy", simple: true },
   { label: "正念陰瑜珈", path: "/mindful-yin-yoga", simple: true },
   { label: "自我照顧", path: "/self-care", simple: true },
-  { label: "課程商店", path: "/shop", simple: true },
+  { label: "課程總覽", path: "/shop", simple: true },
   { label: "部落格", path: "/blog", simple: true },
-  { label: "會員課程", path: "/member-courses", simple: true },
 ];
 
 
@@ -37,11 +36,22 @@ const Navbar = () => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const [featured, setFeatured] = useState<FeaturedArticle[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const { totalItems, setIsOpen: setCartOpen } = useCart();
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdminCheck();
   const loading = authLoading || adminLoading;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node))
+        setUserMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     supabase
@@ -201,26 +211,38 @@ const Navbar = () => {
           {!loading && (
             <>
               {user ? (
-                <>
-                  <Button asChild variant="ghost" size="sm">
-                    <Link to="/member">
-                      <UserCircle className="w-4 h-4 mr-1" />
-                      會員中心
-                    </Link>
-                  </Button>
-                  {isAdmin && (
-                    <Button asChild variant="ghost" size="sm">
-                      <Link to="/admin">
-                        <Settings className="w-4 h-4 mr-1" />
-                        後台管理
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setUserMenuOpen((v) => !v)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <UserCircle className="w-5 h-5" />
+                    <ChevronDown className={`w-3 h-3 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {userMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-background border border-border rounded-md shadow-lg z-50 py-1">
+                      <Link to="/member" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted">
+                        <UserCircle className="w-4 h-4" /> 會員中心
                       </Link>
-                    </Button>
+                      <Link to="/member/purchases" onClick={() => setUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted">
+                        <BookOpen className="w-4 h-4" /> 學習資源
+                      </Link>
+                      {isAdmin && (
+                        <Link to="/admin" onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2.5 text-sm text-foreground hover:bg-muted">
+                          <Settings className="w-4 h-4" /> 後台管理
+                        </Link>
+                      )}
+                      <div className="border-t border-border my-1" />
+                      <button onClick={() => { signOut(); setUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+                        <LogOut className="w-4 h-4" /> 登出
+                      </button>
+                    </div>
                   )}
-                  <Button variant="ghost" size="sm" onClick={signOut}>
-                    <LogOut className="w-4 h-4 mr-1" />
-                    登出
-                  </Button>
-                </>
+                </div>
               ) : (
                 <Button asChild variant="outline" size="sm">
                   <Link to="/auth">

@@ -21,6 +21,8 @@ interface Profile {
   display_name: string | null;
   phone: string | null;
   email: string | null;
+  birthday: string | null;
+  created_at: string | null;
 }
 
 interface AuthUser {
@@ -84,7 +86,7 @@ export const useAuth = () => {
 
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, phone, email")
+        .select("display_name, phone, email, birthday, created_at")
         .eq("id", currentUser.sub)
         .maybeSingle();
       setProfile(data);
@@ -109,7 +111,7 @@ export const useAuth = () => {
 
           const { data } = await supabase
             .from("profiles")
-            .select("display_name, phone, email")
+            .select("display_name, phone, email, birthday, created_at")
             .eq("id", currentUser.sub)
             .maybeSingle();
           setProfile(data);
@@ -139,7 +141,7 @@ export const useAuth = () => {
 
           const { data } = await supabase
             .from("profiles")
-            .select("display_name, phone, email")
+            .select("display_name, phone, email, birthday, created_at")
             .eq("id", currentUser.sub)
             .maybeSingle();
           setProfile(data);

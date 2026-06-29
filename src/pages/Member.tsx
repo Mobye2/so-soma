@@ -46,13 +46,12 @@ const Member = () => {
               </TabsTrigger>
               <TabsTrigger value="password" className="gap-1.5">
                 <Lock className="w-4 h-4" />
-                修改密碼
+                帳號安全
               </TabsTrigger>
               <TabsTrigger value="orders" className="gap-1.5">
                 <Package className="w-4 h-4" />
                 訂單記錄
               </TabsTrigger>
-
             </TabsList>
 
             <TabsContent value="profile">

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +42,7 @@ const empty: Partial<Post> = { title: "", slug: "", excerpt: "", content: "", ca
 const wordCount = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, "").length;
 
 const BlogPostsTab = () => {
+  const { getIdToken } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Post> | null>(null);
@@ -161,6 +164,18 @@ const BlogPostsTab = () => {
     const saved = await persist(editing, { publishOverride: true });
     setSaving(false);
     if (saved) {
+      // 通知電子報訂閱者
+      try {
+        const token = await getIdToken();
+        await apiPost("/notify-published-posts", {
+          postId: saved.id,
+          title: saved.title,
+          excerpt: saved.excerpt || "",
+          url: `https://www.solisforest.com/blog/${saved.slug}`,
+        }, token || undefined);
+      } catch (e) {
+        console.error("notify subscribers failed:", e);
+      }
       toast({ title: "已發佈", description: `/blog/${saved.slug}` });
       setEditing(null);
       setShowPublish(false);

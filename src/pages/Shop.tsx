@@ -1,11 +1,13 @@
 import Layout from "@/components/Layout";
 import SEO from "@/components/SEO";
 import { useState } from "react";
-import { Leaf } from "lucide-react";
+import { Leaf, Bell, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
-import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate, Link } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 import courseNervousSystem from "@/assets/course-nervous-system.webp";
 import courseYinYoga from "@/assets/course-yin-yoga.webp";
 import courseForestHealing from "@/assets/course-forest-healing.webp";
@@ -54,7 +56,33 @@ const categories = ["全部", "線上課程", "即時課程", "實體活動", "�
 
 const Shop = () => {
   const [active, setActive] = useState("全部");
+  const [subscribing, setSubscribing] = useState<string | null>(null);
   const { addItem } = useCart();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSubscribeNotify = async (e: React.MouseEvent, product: any) => {
+    e.preventDefault();
+    if (!user) {
+      navigate(`/auth?redirect=${encodeURIComponent("/shop")}`);
+      return;
+    }
+    setSubscribing(product.id);
+    const { error } = await supabase.from("launch_notify_subscribers").insert({
+      email: user.email,
+      name: profile?.display_name || null,
+      product_name: product.title,
+    });
+    if (error?.code === "23505") {
+      toast({ title: "你已經訂閱過了 🌿" });
+    } else if (error) {
+      toast({ title: "訂閱失敗", description: "請稍後再試", variant: "destructive" });
+    } else {
+      toast({ title: "訂閱成功！", description: "上架時我們會通知你 🌿" });
+    }
+    setSubscribing(null);
+  };
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
@@ -62,10 +90,11 @@ const Shop = () => {
       const { data, error } = await supabase
         .from("products")
         .select("*, courses(slug)")
-        .eq("is_active", true)
         .order("sort_order");
       if (error) throw error;
-      return (data || []).map((p: any) => ({
+      // 只顯示 is_active 或 coming_soon 的商品
+      const active = (data || []).filter((p: any) => p.is_active || p.coming_soon);
+      return active.map((p: any) => ({
         ...p,
         slug: p.slug || p.courses?.[0]?.slug || null,
       }));
@@ -121,35 +150,72 @@ const Shop = () => {
             <div className="text-center text-muted-foreground py-12">載入中...</div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((product) => (
-                <Link
-                  key={product.id}
-                  to={product.slug ? `/shop/${product.slug}` : "/shop"}
-                  className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow block"
-                >
-                  <div className="h-44 bg-sage/10 overflow-hidden">
-                    {(() => {
-                      const imgSrc = (product as any).cover_image || productImageMap[product.id] || categoryFallbackImage[product.category];
-                      return imgSrc ? (
-                        <img src={imgSrc} alt={product.title} className="w-full h-full object-cover" loading="lazy" width={640} height={352} />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Leaf className="w-10 h-10 text-sage/30" />
-                        </div>
-                      );
-                    })()}
-                  </div>
-                  <div className="p-5 space-y-2">
-                    <span className="text-xs text-sage font-medium">{categoryLabels[product.category] || product.category}</span>
-                    <h3 className="font-serif-tc text-base font-semibold text-foreground">{product.title}</h3>
-                    {product.subtitle && <p className="text-xs text-muted-foreground">{product.subtitle}</p>}
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-sm font-medium text-foreground">NT${product.price?.toLocaleString()}</span>
-                      <span className="text-xs text-secondary">了解更多 →</span>
+              {filtered.map((product) => {
+                const isComingSoon = !product.is_active && product.coming_soon;
+                return isComingSoon ? (
+                  <div
+                    key={product.id}
+                    className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow block relative"
+                  >
+                    <div className="h-44 bg-sage/10 overflow-hidden opacity-70">
+                      {(() => {
+                        const imgSrc = product.cover_image || productImageMap[product.id] || categoryFallbackImage[product.category];
+                        return imgSrc ? (
+                          <img src={imgSrc} alt={product.title} className="w-full h-full object-cover" loading="lazy" width={640} height={352} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Leaf className="w-10 h-10 text-sage/30" />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div className="p-5 space-y-2">
+                      <span className="text-xs text-sage font-medium">{categoryLabels[product.category] || product.category}</span>
+                      <h3 className="font-serif-tc text-base font-semibold text-foreground">{product.title}</h3>
+                      {product.subtitle && <p className="text-xs text-muted-foreground">{product.subtitle}</p>}
+                      <div className="flex items-center justify-between pt-2">
+                        <span className="text-xs text-muted-foreground">{product.launch_date ? `預計 ${product.launch_date} 上架` : "即將上架"}</span>
+                        <button
+                          onClick={(e) => handleSubscribeNotify(e, product)}
+                          disabled={subscribing === product.id}
+                          className="inline-flex items-center gap-1 text-xs text-secondary hover:text-secondary/80 transition-colors disabled:opacity-50"
+                        >
+                          {subscribing === product.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Bell className="w-3 h-3" />}
+                          訂閱上架通知
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </Link>
-              ))}
+                ) : (
+                  <Link
+                    key={product.id}
+                    to={product.slug ? `/shop/${product.slug}` : "/shop"}
+                    className="bg-mist rounded-lg border border-border overflow-hidden hover:shadow-md transition-shadow block"
+                  >
+                    <div className="h-44 bg-sage/10 overflow-hidden">
+                      {(() => {
+                        const imgSrc = product.cover_image || productImageMap[product.id] || categoryFallbackImage[product.category];
+                        return imgSrc ? (
+                          <img src={imgSrc} alt={product.title} className="w-full h-full object-cover" loading="lazy" width={640} height={352} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Leaf className="w-10 h-10 text-sage/30" />
+                          </div>
+                        );
+                      })()}
+                    </div>
+                    <div className="p-5 space-y-2">
+                      <span className="text-xs text-sage font-medium">{categoryLabels[product.category] || product.category}</span>
+                      <h3 className="font-serif-tc text-base font-semibold text-foreground">{product.title}</h3>
+                      {product.subtitle && <p className="text-xs text-muted-foreground">{product.subtitle}</p>}
+                      <div className="flex items-center justify-between pt-2">
+                        <span className="text-sm font-medium text-foreground">NT${product.price?.toLocaleString()}</span>
+                        <span className="text-xs text-secondary">了解更多 →</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
 

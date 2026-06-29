@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Loader2, Leaf } from "lucide-react";
 
 const inputClass = "w-full px-4 py-3 rounded-md bg-background border border-border text-sm focus:outline-none focus:ring-1 focus:ring-sage";
 
@@ -16,6 +16,8 @@ const Auth = () => {
   const [form, setForm] = useState({ email: "", password: "", confirmPassword: "", name: "", phone: "", code: "", newPassword: "", newPasswordConfirm: "" });
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
   const { signIn, signUp, confirmSignUp, completeNewPassword, needsNewPassword, forgotPassword, confirmForgotPassword } = useAuth();
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
@@ -51,10 +53,11 @@ const Auth = () => {
         setNeedConfirm(false);
         setIsLogin(true);
         setForm({ ...form, code: "" });
+        navigate(redirectTo);
       } else if (isLogin) {
         await signIn(form.email, form.password);
         toast({ title: "登入成功！" });
-        navigate("/");
+        navigate(redirectTo);
       } else {
         if (form.password !== form.confirmPassword) {
           toast({ title: "密碼不一致", description: "請確認兩次輸入的密碼相同", variant: "destructive" });
@@ -145,6 +148,21 @@ const Auth = () => {
               </button>
             </p>
           )}
+
+          <div className="mt-10 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-3 w-full">
+              <div className="flex-1 h-px bg-border" />
+              <Leaf className="w-3.5 h-3.5 text-sage/50 shrink-0" />
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <p className="text-xs text-muted-foreground">不想辦會員？</p>
+            <a
+              href="/about#contact"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-sage/40 text-sm text-secondary bg-sage/5 hover:bg-sage/15 transition-colors"
+            >
+              直接聯絡營運團隊
+            </a>
+          </div>
         </div>
       </section>
     </Layout>

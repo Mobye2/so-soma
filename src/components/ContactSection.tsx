@@ -19,7 +19,14 @@ const ContactSection = ({ showHeading = true }: ContactSectionProps) => {
 
   useEffect(() => {
     const presetSubject = searchParams.get("subject");
-    if (presetSubject) {
+    const presetProduct = searchParams.get("product");
+    if (presetSubject === "launch-notify" && presetProduct) {
+      setForm((prev) => ({
+        ...prev,
+        subject: "launch-notify",
+        content: prev.content || `我想收到「${presetProduct}」的上架通知，謝謝！`,
+      }));
+    } else if (presetSubject) {
       setForm((prev) => ({
         ...prev,
         subject: "launch-notify",

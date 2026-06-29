@@ -19,6 +19,7 @@ SUBJECTS = {
     "quiz-result": lambda _: "你的測驗結果｜煦日之森",
     "blog-post-published": lambda d: f"新文章發佈｜{d.get('title', '')}・煦日之森",
     "blog-post-subscriber-notice": lambda d: f"新文章｜{d.get('title', '')}・煦日之森",
+    "launch-notify": lambda d: f"你等待的「{d.get('product_name', '商品')}」現已上架｜煦日之森",
 }
 
 BODIES = {
@@ -51,6 +52,13 @@ BODIES = {
         f"煦日之森有新文章：《{d.get('title', '')}》\n\n"
         f"{d.get('excerpt', '')}\n\n"
         f"閱讀全文：{d.get('url', 'https://www.solisforest.com/blog')}\n\n"
+        "煦日之森・Solis Forest"
+    ),
+    "launch-notify": lambda d: (
+        f"{d.get('name', '')}，你好\n\n"
+        f"你之前登記希望收到「{d.get('product_name', '商品')}」的上架通知。\n\n"
+        f"好消息！這個商品現在已經正式上架了。\n\n"
+        f"立即前往：{d.get('url', 'https://www.solisforest.com/shop')}\n\n"
         "煦日之森・Solis Forest"
     ),
 }

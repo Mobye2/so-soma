@@ -41,6 +41,8 @@ interface Product {
   sort_order: number;
   slug: string;
   cover_image: string | null;
+  coming_soon: boolean;
+  launch_date?: string | null;
   post_purchase_note?: string | null;
   post_purchase_image?: string | null;
   // ebook
@@ -69,7 +71,7 @@ interface Product {
 const emptyProduct: Partial<Product> = {
   title: "", subtitle: "", description: "", price: 0,
   category: "online_course", cta_label: "立即購買",
-  is_active: false, sort_order: 0, slug: "", cover_image: "",
+  is_active: false, coming_soon: false, launch_date: "", sort_order: 0, slug: "", cover_image: "",
   post_purchase_note: "", post_purchase_image: "",
   ebook_download_url: "", ebook_file_format: "",
   event_datetime: "", event_location: "", event_meeting_notes: "", event_notes: "",
@@ -134,6 +136,12 @@ const ProductsTab = () => {
     if (!editing.title?.trim()) return toast({ title: "請輸入商品名稱", variant: "destructive" });
     setSaving(true);
 
+    // 記錄儲存前的上架狀態，用來偵測是否剛上架
+    const wasInactive = editing.id
+      ? products.find((p) => p.id === editing.id)?.is_active === false
+      : false;
+    const justActivated = wasInactive && !!editing.is_active;
+
     const productSlug = editing.slug?.trim() || slugify(editing.title!);
     const productPayload = {
       title: editing.title!.trim(),
@@ -144,6 +152,8 @@ const ProductsTab = () => {
       category: editing.category,
       cta_label: editing.cta_label || "立即購買",
       is_active: !!editing.is_active,
+      coming_soon: !!editing.coming_soon,
+      launch_date: editing.launch_date || null,
       sort_order: editing.sort_order ?? 0,
       slug: productSlug,
       cover_image: editing.cover_image || null,
@@ -206,6 +216,43 @@ const ProductsTab = () => {
       }
 
       toast({ title: "已儲存" });
+
+      // 上架通知：is_active 從 false → true 時，寄信給訂閱該商品的名單
+      if (justActivated && editing.title) {
+        try {
+          const token = await getIdToken();
+          const subs = await apiPost("/admin-db", {
+            method: "GET",
+            table: `launch_notify_subscribers?product_name=eq.${encodeURIComponent(editing.title.trim())}&notified_at=is.null&select=id,email,name`,
+          }, token || undefined);
+
+          if (Array.isArray(subs) && subs.length > 0) {
+            const productUrl = `https://www.solisforest.com/shop/${editing.slug?.trim() || ""}`;
+            for (const sub of subs) {
+              try {
+                await apiPost("/send-email", {
+                  templateName: "launch-notify",
+                  recipientEmail: sub.email,
+                  templateData: { name: sub.name || "", product_name: editing.title.trim(), url: productUrl },
+                });
+                // 更新 notified_at
+                await apiPost("/admin-db", {
+                  method: "PATCH",
+                  table: "launch_notify_subscribers",
+                  payload: { notified_at: new Date().toISOString() },
+                  filters: { id: `eq.${sub.id}` },
+                }, token || undefined);
+              } catch (e) {
+                console.error(`launch notify failed for ${sub.email}:`, e);
+              }
+            }
+            toast({ title: `已寄送 ${subs.length} 封上架通知` });
+          }
+        } catch (e) {
+          console.error("launch notify fetch failed:", e);
+        }
+      }
+
       setEditing(null);
       load();
     } catch (error: any) {
@@ -308,7 +355,9 @@ const ProductsTab = () => {
                     <TableCell><Badge variant="outline">{catLabel(p.category)}</Badge></TableCell>
                     <TableCell>NT${p.price.toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={p.is_active ? "default" : "secondary"}>{p.is_active ? "上架中" : "未上架"}</Badge>
+                      <Badge variant={p.is_active ? "default" : p.coming_soon ? "outline" : "secondary"}>
+                        {p.is_active ? "上架中" : p.coming_soon ? "即將上架" : "未上架"}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button size="sm" variant="ghost" onClick={() => openEdit(p)}><Pencil className="w-4 h-4" /></Button>
@@ -386,9 +435,31 @@ const ProductsTab = () => {
                   {editing.cover_image && <img src={editing.cover_image} alt="cover" className="mt-2 w-full h-32 rounded object-cover" />}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Switch checked={!!editing.is_active} onCheckedChange={(v) => setEditing({ ...editing, is_active: v })} />
-                  <Label>在商店上架顯示</Label>
+                <div className="space-y-3 border border-border rounded-lg p-4">
+                  <p className="text-sm font-medium">上架狀態</p>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={!!editing.is_active} onCheckedChange={(v) => setEditing({ ...editing, is_active: v, coming_soon: v ? false : editing.coming_soon })} />
+                    <Label>正式上架（可購買）</Label>
+                  </div>
+                  {!editing.is_active && (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={!!editing.coming_soon} onCheckedChange={(v) => setEditing({ ...editing, coming_soon: v })} />
+                        <Label>即將上架（顯示卡片 + 訂閱通知按鈕）</Label>
+                      </div>
+                      {editing.coming_soon && (
+                        <div>
+                          <Label>預計上架時間（選填）</Label>
+                          <Input
+                            value={editing.launch_date || ""}
+                            onChange={(e) => setEditing({ ...editing, launch_date: e.target.value })}
+                            placeholder="例：2026 Q4、8 月中旬"
+                            className="mt-1"
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 {/* 其他 */}

@@ -11,12 +11,12 @@ VIDEO_BUCKET = os.environ["VIDEO_BUCKET"]
 ASSETS_BUCKET = os.environ.get("ASSETS_BUCKET", "")
 COGNITO_REGION = os.environ.get("COGNITO_REGION", "ap-east-2")
 COGNITO_USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
-UPLOAD_URL_EXPIRES = int(os.environ.get("UPLOAD_URL_EXPIRES", "900"))  # 15 min
+UPLOAD_URL_EXPIRES = int(os.environ.get("UPLOAD_URL_EXPIRES", "900"))
 
 s3 = boto3.client(
     "s3",
     region_name=COGNITO_REGION,
-    config=Config(signature_version="s3v4", s3={"addressing_style": "path"})
+    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
 )
 
 
@@ -32,25 +32,26 @@ def cors(status, body):
     }
 
 
-def verify_admin_token(token):
-    import base64
-    import time
+def _get_jwks():
+    url = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+    with urllib.request.urlopen(url, timeout=5) as r:
+        return json.loads(r.read())
+
+
+def _decode_token(token):
+    import base64, time
 
     parts = token.split(".")
     if len(parts) != 3:
         raise ValueError("Invalid token format")
 
-    def b64_decode(s):
+    def b64d(s):
         s += "=" * (-len(s) % 4)
         return base64.urlsafe_b64decode(s)
 
-    header = json.loads(b64_decode(parts[0]))
+    header = json.loads(b64d(parts[0]))
     kid = header.get("kid")
-
-    jwks_url = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}/.well-known/jwks.json"
-    with urllib.request.urlopen(jwks_url, timeout=5) as r:
-        jwks = json.loads(r.read())
-
+    jwks = _get_jwks()
     key_data = next((k for k in jwks["keys"] if k["kid"] == kid), None)
     if not key_data:
         raise ValueError("Key not found")
@@ -59,14 +60,24 @@ def verify_admin_token(token):
         from jose import jwt as jose_jwt
         payload = jose_jwt.decode(token, key_data, algorithms=["RS256"], options={"verify_aud": False})
     except ImportError:
-        payload = json.loads(b64_decode(parts[1]))
+        payload = json.loads(b64d(parts[1]))
 
     if payload.get("exp", 0) < time.time():
         raise ValueError("Token expired")
 
+    return payload
+
+
+def verify_admin_token(token):
+    payload = _decode_token(token)
     if "admin" not in payload.get("cognito:groups", []):
         raise PermissionError("Admin only")
+    return payload["sub"]
 
+
+def verify_user_token(token):
+    """Any valid Cognito user."""
+    payload = _decode_token(token)
     return payload["sub"]
 
 
@@ -79,6 +90,37 @@ def handler(event, context):
         return cors(401, {"error": "Missing token"})
 
     token = auth_header[7:]
+    body = json.loads(event.get("body") or "{}")
+    upload_type = body.get("type", "video")
+
+    # ── Avatar upload: any authenticated user, own folder only ──────────────
+    if upload_type == "avatar":
+        try:
+            user_sub = verify_user_token(token)
+        except Exception as e:
+            return cors(401, {"error": f"Invalid token: {e}"})
+
+        if not ASSETS_BUCKET:
+            return cors(500, {"error": "ASSETS_BUCKET not configured"})
+
+        filename = body.get("filename", "avatar.jpg")
+        content_type = body.get("content_type", "image/jpeg")
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+        s3_key = f"avatars/{user_sub}/avatar.{ext}"
+        public_url = f"https://{os.environ.get('ASSETS_CF_DOMAIN', '')}/{s3_key}"
+
+        try:
+            upload_url = s3.generate_presigned_url(
+                "put_object",
+                Params={"Bucket": ASSETS_BUCKET, "Key": s3_key, "ContentType": content_type},
+                ExpiresIn=UPLOAD_URL_EXPIRES,
+            )
+        except ClientError as e:
+            return cors(500, {"error": str(e)})
+
+        return cors(200, {"upload_url": upload_url, "s3_key": s3_key, "public_url": public_url})
+
+    # ── Admin-only uploads (image / video) ──────────────────────────────────
     try:
         user_id = verify_admin_token(token)
     except PermissionError as e:
@@ -86,14 +128,9 @@ def handler(event, context):
     except Exception as e:
         return cors(401, {"error": f"Invalid token: {e}"})
 
-    body = json.loads(event.get("body") or "{}")
-    upload_type = body.get("type", "video")  # "video" or "image"
-    course_id = body.get("course_id")
-    chapter_id = body.get("chapter_id")
     filename = body.get("filename", "file")
     content_type = body.get("content_type", "video/mp4")
 
-    # 圖片上傳
     if upload_type == "image":
         if not ASSETS_BUCKET:
             return cors(500, {"error": "ASSETS_BUCKET not configured"})
@@ -102,6 +139,8 @@ def handler(event, context):
         bucket = ASSETS_BUCKET
         public_url = f"https://{os.environ.get('ASSETS_CF_DOMAIN', '')}/{s3_key}"
     else:
+        course_id = body.get("course_id")
+        chapter_id = body.get("chapter_id")
         if not course_id or not chapter_id:
             return cors(400, {"error": "course_id and chapter_id required"})
         ext = filename.rsplit(".", 1)[-1] if "." in filename else "mp4"
@@ -112,11 +151,7 @@ def handler(event, context):
     try:
         upload_url = s3.generate_presigned_url(
             "put_object",
-            Params={
-                "Bucket": bucket,
-                "Key": s3_key,
-                "ContentType": content_type,
-            },
+            Params={"Bucket": bucket, "Key": s3_key, "ContentType": content_type},
             ExpiresIn=UPLOAD_URL_EXPIRES,
         )
     except ClientError as e:

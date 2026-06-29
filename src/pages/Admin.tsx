@@ -38,17 +38,6 @@ interface Order {
   items?: OrderItem[];
 }
 
-interface EventRegistration {
-  id: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  event_type: string;
-  status: string;
-  notes: string | null;
-  created_at: string;
-}
-
 const useResizableColumns = (initialWidths: number[]) => {
   const [widths, setWidths] = useState(initialWidths);
   const dragging = useRef<{ colIndex: number; startX: number; startWidth: number } | null>(null);
@@ -90,7 +79,6 @@ const statusColor = (status: string) => {
 const Admin = () => {
   const { user, isAdmin, loading } = useAdminCheck();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [registrations, setRegistrations] = useState<EventRegistration[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
@@ -99,12 +87,10 @@ const Admin = () => {
     const fetchData = async () => {
       try {
         // 直接用 Supabase，不用 Lambda
-        const [ordersRes, regsRes] = await Promise.all([
+        const [ordersRes] = await Promise.all([
           supabase.from("orders").select("*, order_items(id, product_title, quantity, unit_price)").order("created_at", { ascending: false }),
-          supabase.from("event_registrations").select("*").order("created_at", { ascending: false }),
         ]);
         if (ordersRes.data) setOrders(ordersRes.data.map((o: any) => ({ ...o, items: o.order_items || [] })));
-        if (regsRes.data) setRegistrations(regsRes.data);
       } catch (e) {
         console.error("Failed to load admin data:", e);
       }
@@ -134,14 +120,6 @@ const Admin = () => {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">活動報名數</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-foreground">{registrations.length}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">總營收</CardTitle>
               </CardHeader>
               <CardContent>
@@ -155,7 +133,6 @@ const Admin = () => {
           <Tabs defaultValue="orders">
             <TabsList className="mb-4">
               <TabsTrigger value="orders">訂單列表</TabsTrigger>
-              <TabsTrigger value="registrations">活動報名</TabsTrigger>
               <TabsTrigger value="contacts">聯絡訊息</TabsTrigger>
               <TabsTrigger value="ig">IG 貼文</TabsTrigger>
               <TabsTrigger value="blog">部落格</TabsTrigger>
@@ -242,51 +219,6 @@ const Admin = () => {
                                 </TableRow>
                               )}
                             </>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="registrations">
-              <Card>
-                <CardContent className="p-0">
-                  {loadingData ? (
-                    <p className="p-6 text-muted-foreground">載入中...</p>
-                  ) : registrations.length === 0 ? (
-                    <p className="p-6 text-muted-foreground">目前沒有活動報名</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>報名時間</TableHead>
-                            <TableHead>姓名</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>電話</TableHead>
-                            <TableHead>活動類型</TableHead>
-                            <TableHead>狀態</TableHead>
-                            <TableHead>備註</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {registrations.map((reg) => (
-                            <TableRow key={reg.id}>
-                              <TableCell className="whitespace-nowrap">
-                                {new Date(reg.created_at).toLocaleString("zh-TW")}
-                              </TableCell>
-                              <TableCell>{reg.customer_name}</TableCell>
-                              <TableCell>{reg.customer_email}</TableCell>
-                              <TableCell>{reg.customer_phone}</TableCell>
-                              <TableCell>{reg.event_type}</TableCell>
-                              <TableCell>
-                                <Badge variant={statusColor(reg.status)}>{reg.status}</Badge>
-                              </TableCell>
-                              <TableCell className="max-w-[200px] truncate">{reg.notes || "-"}</TableCell>
-                            </TableRow>
                           ))}
                         </TableBody>
                       </Table>

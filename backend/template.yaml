@@ -187,9 +187,18 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
           SEND_EMAIL_FUNCTION_NAME: !Ref SendTransactionalEmailFunction
+          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref SendTransactionalEmailFunction
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /notify-published-posts
+            Method: POST
 
   EmailQueue:
     Type: AWS::SQS::Queue

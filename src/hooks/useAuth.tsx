@@ -5,7 +5,7 @@ import {
   AuthenticationDetails,
   CognitoUserAttribute,
 } from "amazon-cognito-identity-js";
-import { supabase, setSupabaseToken } from "@/integrations/supabase/client";
+import { supabase, setSupabaseSession } from "@/integrations/supabase/client";
 import { apiPost } from "@/lib/api";
 
 const poolData = {
@@ -15,7 +15,7 @@ const poolData = {
 
 export const userPool = new CognitoUserPool(poolData);
 
-let _syncAuthPromise: Promise<string | null> | null = null;
+let _syncAuthPromise: Promise<void> | null = null;
 
 interface Profile {
   display_name: string | null;
@@ -39,25 +39,26 @@ export const useAuth = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [pendingCognitoUser, setPendingCognitoUser] = useState<CognitoUser | null>(null);
 
-  const syncAuth = async (cognitoJwt: string): Promise<string | null> => {
-    if (_syncAuthPromise) return _syncAuthPromise;
+  const syncAuth = async (cognitoJwt: string): Promise<void> => {
+    if (_syncAuthPromise) {
+      await _syncAuthPromise;
+      return;
+    }
     _syncAuthPromise = (async () => {
       try {
-        const { supabase_token } = await apiPost<{ supabase_token: string }>(
+        const { access_token, refresh_token } = await apiPost<{ access_token: string; refresh_token: string }>(
           "/sync-auth",
           {},
           cognitoJwt
         );
-        setSupabaseToken(supabase_token);
-        return supabase_token;
+        await setSupabaseSession(access_token, refresh_token);
       } catch (err) {
         console.error("Failed to sync auth:", err);
-        return null;
       } finally {
         _syncAuthPromise = null;
       }
     })();
-    return _syncAuthPromise;
+    await _syncAuthPromise;
   };
 
   useEffect(() => {
@@ -203,7 +204,7 @@ export const useAuth = () => {
   const signOut = () => {
     const cognitoUser = userPool.getCurrentUser();
     cognitoUser?.signOut();
-    setSupabaseToken(null);
+    supabase.auth.signOut();
     setIsAdmin(false);
     setUser(null);
     setProfile(null);

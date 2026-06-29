@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { apiPost } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,105 +8,99 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "@/hooks/use-toast";
 import { Trash2 } from "lucide-react";
 
-interface Enrollment {
+interface AccessRow {
   id: string;
   user_id: string;
-  course_id: string;
-  source: string;
+  product_id: string;
   granted_at: string;
-  expires_at: string | null;
-  course?: { title: string; slug: string };
+  product?: { title: string; category: string };
   profile?: { email: string | null; display_name: string | null };
 }
-interface Course { id: string; title: string; slug: string; }
+
+interface Product { id: string; title: string; category: string; }
 
 const CourseEnrollmentsTab = () => {
-  const { getIdToken } = useAuth();
-  const [list, setList] = useState<Enrollment[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
+  const [list, setList] = useState<AccessRow[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [email, setEmail] = useState("");
-  const [courseId, setCourseId] = useState("");
+  const [productId, setProductId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    try {
-      const token = await getIdToken();
-      const [enrollments, coursesData] = await Promise.all([
-        apiPost("/admin-db", { method: "GET", table: "course_enrollments?order=granted_at.desc" }, token || undefined),
-        apiPost("/admin-db", { method: "GET", table: "courses?order=sort_order&select=id,title,slug" }, token || undefined),
-      ]);
-      const enrList = Array.isArray(enrollments) ? enrollments as Enrollment[] : [];
-      const userIds = [...new Set(enrList.map((e: Enrollment) => e.user_id))];
-      const courseIds = [...new Set(enrList.map((e: Enrollment) => e.course_id))];
-      
-      const [profiles, coursesDetail] = await Promise.all([
-        userIds.length ? apiPost("/admin-db", { method: "GET", table: `profiles?id=in.(${userIds.join(",")})&select=id,email,display_name` }, token || undefined) : Promise.resolve([]),
-        courseIds.length ? apiPost("/admin-db", { method: "GET", table: `courses?id=in.(${courseIds.join(",")})&select=id,title,slug` }, token || undefined) : Promise.resolve([]),
-      ]);
-      
-      const pMap = new Map((Array.isArray(profiles) ? profiles : []).map((p: any) => [p.id, p]));
-      const cMap = new Map((Array.isArray(coursesDetail) ? coursesDetail : []).map((c: any) => [c.id, c]));
-      setList(enrList.map((e) => ({ ...e, profile: pMap.get(e.user_id) as any, course: cMap.get(e.course_id) as any })));
-      setCourses(Array.isArray(coursesData) ? coursesData as Course[] : []);
-    } catch (e) {
-      console.error("Failed to load enrollments:", e);
-    }
+    const [accessRes, productsRes] = await Promise.all([
+      supabase.from("user_product_access").select("*").order("granted_at", { ascending: false }),
+      supabase.from("products").select("id,title,category").order("title"),
+    ]);
+
+    const rows: AccessRow[] = accessRes.data || [];
+    const userIds = [...new Set(rows.map((r) => r.user_id))];
+    const productIds = [...new Set(rows.map((r) => r.product_id))];
+
+    const [profilesRes, productsDetailRes] = await Promise.all([
+      userIds.length ? supabase.from("profiles").select("id,email,display_name").in("id", userIds) : Promise.resolve({ data: [] }),
+      productIds.length ? supabase.from("products").select("id,title,category").in("id", productIds) : Promise.resolve({ data: [] }),
+    ]);
+
+    const pMap = new Map((profilesRes.data || []).map((p: any) => [p.id, p]));
+    const cMap = new Map((productsDetailRes.data || []).map((c: any) => [c.id, c]));
+
+    setList(rows.map((r) => ({ ...r, profile: pMap.get(r.user_id) as any, product: cMap.get(r.product_id) as any })));
+    setProducts(productsRes.data || []);
     setLoading(false);
   };
+
   useEffect(() => { load(); }, []);
 
   const grant = async () => {
-    if (!email.trim() || !courseId) return toast({ title: "請填寫 Email 與選擇課程", variant: "destructive" });
+    if (!email.trim() || !productId) return toast({ title: "請填寫 Email 與選擇商品", variant: "destructive" });
     setSaving(true);
-    try {
-      const token = await getIdToken();
-      const prof = await apiPost("/admin-db", {
-        method: "GET",
-        table: `profiles?email=eq.${encodeURIComponent(email.trim().toLowerCase())}&select=id&limit=1`
-      }, token || undefined);
-      
-      if (!prof || !Array.isArray(prof) || prof.length === 0) {
-        setSaving(false);
-        return toast({ title: "找不到此會員", description: "請確認該 Email 已註冊", variant: "destructive" });
-      }
-      
-      await apiPost("/admin-db", {
-        method: "POST",
-        table: "course_enrollments",
-        payload: { user_id: prof[0].id, course_id: courseId, source: "manual" }
-      }, token || undefined);
-      
-      toast({ title: "授權成功" });
-      setEmail(""); setCourseId("");
-      load();
-    } catch (error: any) {
-      toast({ title: "授權失敗", description: error.message, variant: "destructive" });
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id,email")
+      .ilike("email", email.trim())
+      .limit(1);
+
+    if (!profiles || profiles.length === 0) {
+      setSaving(false);
+      return toast({
+        title: "找不到會員帳號",
+        description: "此 Email 尚未建立 Profile。請請會員先登入一次再授權",
+        variant: "destructive",
+      });
     }
+
+    const finalUserId = profiles[0].id;
+
+    const { error } = await supabase.from("user_product_access").insert({
+      user_id: finalUserId,
+      product_id: productId,
+    });
+
     setSaving(false);
+    if (error) {
+      if (error.code === "23505") return toast({ title: "已有授權", description: "此會員已有該商品的存取權", variant: "destructive" });
+      return toast({ title: "授權失敗", description: error.message, variant: "destructive" });
+    }
+    toast({ title: "授權成功" });
+    setEmail(""); setProductId("");
+    load();
   };
 
   const revoke = async (id: string) => {
     if (!confirm("確定撤銷此授權？")) return;
-    try {
-      const token = await getIdToken();
-      await apiPost("/admin-db", {
-        method: "DELETE",
-        table: "course_enrollments",
-        filters: { id: `eq.${id}` }
-      }, token || undefined);
-      toast({ title: "已撤銷" });
-      load();
-    } catch (error: any) {
-      toast({ title: "撤銷失敗", description: error.message, variant: "destructive" });
-    }
+    const { error } = await supabase.from("user_product_access").delete().eq("id", id);
+    if (error) return toast({ title: "撤銷失敗", description: error.message, variant: "destructive" });
+    toast({ title: "已撤銷" });
+    load();
   };
 
   return (
     <Card>
       <CardContent className="p-6 space-y-5">
-        <h3 className="text-lg font-semibold">課程授權管理</h3>
+        <h3 className="text-lg font-semibold">學習資源授權管理</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end border-b pb-4">
           <div>
@@ -115,13 +108,13 @@ const CourseEnrollmentsTab = () => {
             <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="member@example.com" />
           </div>
           <div>
-            <Label>選擇課程</Label>
-            <select className="w-full h-10 border rounded px-3 bg-background" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+            <Label>選擇商品</Label>
+            <select className="w-full h-10 border rounded px-3 bg-background text-sm" value={productId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">-- 選擇 --</option>
-              {courses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+              {products.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
           </div>
-          <Button onClick={grant} disabled={saving}>{saving ? "授權中..." : "授權課程"}</Button>
+          <Button onClick={grant} disabled={saving}>{saving ? "授權中..." : "授權"}</Button>
         </div>
 
         {loading ? (
@@ -133,24 +126,24 @@ const CourseEnrollmentsTab = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>會員</TableHead>
-                <TableHead>課程</TableHead>
-                <TableHead>來源</TableHead>
+                <TableHead>商品</TableHead>
+                <TableHead>分類</TableHead>
                 <TableHead>授權時間</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.map((e) => (
-                <TableRow key={e.id}>
+              {list.map((r) => (
+                <TableRow key={r.id}>
                   <TableCell>
-                    <div className="text-sm">{e.profile?.email || e.user_id}</div>
-                    {e.profile?.display_name && <div className="text-xs text-muted-foreground">{e.profile.display_name}</div>}
+                    <div className="text-sm">{r.profile?.email || r.user_id}</div>
+                    {r.profile?.display_name && <div className="text-xs text-muted-foreground">{r.profile.display_name}</div>}
                   </TableCell>
-                  <TableCell>{e.course?.title || e.course_id}</TableCell>
-                  <TableCell><span className="text-xs">{e.source}</span></TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">{new Date(e.granted_at).toLocaleString("zh-TW")}</TableCell>
+                  <TableCell>{r.product?.title || r.product_id}</TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">{r.product?.category || "-"}</span></TableCell>
+                  <TableCell className="text-xs whitespace-nowrap">{new Date(r.granted_at).toLocaleString("zh-TW")}</TableCell>
                   <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => revoke(e.id)}><Trash2 className="w-4 h-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => revoke(r.id)}><Trash2 className="w-4 h-4" /></Button>
                   </TableCell>
                 </TableRow>
               ))}

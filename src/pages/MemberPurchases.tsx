@@ -39,13 +39,21 @@ const MemberPurchases = () => {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: accessRows } = await supabase
+      console.log("[debug] user.sub:", user.sub);
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("[debug] session uid:", sessionData.session?.user?.id);
+      const { data: accessRows, error: accessError } = await supabase
+        .from("user_product_access")
+        .select("product_id,granted_at,expires_at");
+      console.log("[debug] accessRows (no filter):", accessRows, "error:", accessError);
+      const { data: accessRows2, error: accessError2 } = await supabase
         .from("user_product_access")
         .select("product_id,granted_at,expires_at")
         .eq("user_id", user.sub);
+      console.log("[debug] accessRows (with filter):", accessRows2, "error:", accessError2);
 
       const now = new Date();
-      const valid = (accessRows || []).filter(
+      const valid = (accessRows2 || []).filter(
         (r) => !r.expires_at || new Date(r.expires_at) > now
       );
 

@@ -4,6 +4,7 @@ import time
 import base64
 import urllib.request
 import urllib.parse
+import boto3
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -104,6 +105,11 @@ def handler(event, context):
     # Parse request
     body = json.loads(event.get("body") or "{}")
     print(f"admin-db request: {json.dumps(body, ensure_ascii=False)[:500]}")
+
+    # Cognito group 操作
+    if body.get("cognito_action"):
+        return handle_cognito_action(body)
+
     method = body.get("method", "GET").upper()   # GET/POST/PATCH/DELETE
     table = body.get("table")                     # e.g. "course_chapters"
     payload = body.get("payload")                 # data to write
@@ -124,3 +130,32 @@ def handler(event, context):
         return cors(status, {"error": result})
 
     return cors(200, result or {})
+
+
+def handle_cognito_action(body):
+    action = body.get("cognito_action")  # "add_admin" or "remove_admin"
+    username = body.get("username")      # email
+    if not username:
+        return cors(400, {"error": "username required"})
+
+    client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
+    try:
+        if action == "add_admin":
+            client.admin_add_user_to_group(
+                UserPoolId=COGNITO_USER_POOL_ID,
+                Username=username,
+                GroupName="admin",
+            )
+        elif action == "remove_admin":
+            client.admin_remove_user_from_group(
+                UserPoolId=COGNITO_USER_POOL_ID,
+                Username=username,
+                GroupName="admin",
+            )
+        else:
+            return cors(400, {"error": f"Unknown cognito_action: {action}"})
+        return cors(200, {"success": True})
+    except client.exceptions.UserNotFoundException:
+        return cors(404, {"error": "User not found in Cognito"})
+    except Exception as e:
+        return cors(500, {"error": str(e)})

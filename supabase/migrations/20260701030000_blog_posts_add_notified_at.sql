@@ -1,0 +1,1 @@
+ALTER TABLE public.blog_posts ADD COLUMN IF NOT EXISTS notified_at TIMESTAMP WITH TIME ZONE;

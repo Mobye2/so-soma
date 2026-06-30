@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { apiPost } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +17,7 @@ interface Admin {
 
 const AdminsTab = ({ currentUserEmail }: { currentUserEmail: string }) => {
   const { toast } = useToast();
+  const { getIdToken } = useAuth();
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [newEmail, setNewEmail] = useState("");
@@ -61,10 +64,9 @@ const AdminsTab = ({ currentUserEmail }: { currentUserEmail: string }) => {
     if (!newEmail.trim()) return;
     setAdding(true);
 
-    // 從 profiles 查到這個 email 對應的 supabase_auth_id
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("supabase_auth_id")
+      .select("supabase_auth_id, email")
       .eq("email", newEmail.trim())
       .maybeSingle();
 
@@ -74,7 +76,6 @@ const AdminsTab = ({ currentUserEmail }: { currentUserEmail: string }) => {
       return;
     }
 
-    // 檢查是否已是管理員
     const { data: existing } = await supabase
       .from("user_roles")
       .select("id")
@@ -87,22 +88,40 @@ const AdminsTab = ({ currentUserEmail }: { currentUserEmail: string }) => {
       setAdding(false);
       return;
     }
+
+    // 1. 寫入 Supabase user_roles
     const { error } = await supabase
       .from("user_roles")
       .insert({ user_id: profile.supabase_auth_id as unknown as string, role: "admin" });
 
     if (error) {
       toast({ title: "新增失敗", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "已新增管理員" });
-      setNewEmail("");
-      fetchAdmins();
+      setAdding(false);
+      return;
     }
+
+    // 2. 加入 Cognito admin group
+    try {
+      const token = await getIdToken();
+      await apiPost("/admin-db", {
+        cognito_action: "add_admin",
+        username: newEmail.trim(),
+      }, token || undefined);
+    } catch (e) {
+      console.error("Cognito add admin failed:", e);
+      toast({ title: "警告", description: "Supabase 已更新，但 Cognito 同步失敗，請聯絡系統管理員", variant: "destructive" });
+    }
+
+    toast({ title: "已新增管理員" });
+    setNewEmail("");
+    fetchAdmins();
     setAdding(false);
   };
 
   const handleRemove = async (supabaseAuthId: string) => {
     setRemovingId(supabaseAuthId);
+
+    // 1. 移除 Supabase user_roles
     const { error } = await supabase
       .from("user_roles")
       .delete()
@@ -111,10 +130,26 @@ const AdminsTab = ({ currentUserEmail }: { currentUserEmail: string }) => {
 
     if (error) {
       toast({ title: "移除失敗", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "已移除管理員" });
-      fetchAdmins();
+      setRemovingId(null);
+      return;
     }
+
+    // 2. 從 Cognito admin group 移除
+    const admin = admins.find((a) => a.supabase_auth_id === supabaseAuthId);
+    if (admin?.email) {
+      try {
+        const token = await getIdToken();
+        await apiPost("/admin-db", {
+          cognito_action: "remove_admin",
+          username: admin.email,
+        }, token || undefined);
+      } catch (e) {
+        console.error("Cognito remove admin failed:", e);
+      }
+    }
+
+    toast({ title: "已移除管理員" });
+    fetchAdmins();
     setRemovingId(null);
   };
 

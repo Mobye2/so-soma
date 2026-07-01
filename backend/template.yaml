@@ -211,7 +211,7 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
           SEND_EMAIL_FUNCTION_NAME: !Ref SendTransactionalEmailFunction
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
       Policies:
         - LambdaInvokePolicy:
@@ -580,7 +580,7 @@ Resources:
         Variables:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
       Events:
         Api:
@@ -602,7 +602,7 @@ Resources:
         Variables:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
       Policies:
         - Version: '2012-10-17'
@@ -633,7 +633,7 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
           SUPABASE_JWT_SECRET: !Ref SupabaseJwtSecret
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
       Events:
         Api:
@@ -675,7 +675,7 @@ Resources:
         Variables:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_SERVICE_ROLE_KEY: !Ref SupabaseServiceKey
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
           CF_DOMAIN: !GetAtt VideoDistribution.DomainName
           CF_KEY_ID_SSM: /solis/cf_key_id
@@ -715,7 +715,7 @@ Resources:
           VIDEO_BUCKET: !Ref VideoRawBucket
           ASSETS_BUCKET: !Ref AssetsBucket
           ASSETS_CF_DOMAIN: !GetAtt AssetsDistribution.DomainName
-          COGNITO_REGION: !Sub "${AWS::Region}"
+          COGNITO_REGION: !Ref CognitoRegion
           COGNITO_USER_POOL_ID: !Ref CognitoUserPoolId
           UPLOAD_URL_EXPIRES: "900"
       Policies:
@@ -776,6 +776,10 @@ Parameters:
   CognitoUserPoolId:
     Type: String
     Description: Cognito User Pool ID for JWT verification
+  CognitoRegion:
+    Type: String
+    Default: ap-northeast-1
+    Description: Cognito User Pool region
   CfKeyGroupId:
     Type: String
     Description: CloudFront Key Group ID for Signed Cookie

@@ -90,6 +90,7 @@ const Shop = () => {
       const { data, error } = await supabase
         .from("products")
         .select("*, courses(slug)")
+        .or("is_active.eq.true,coming_soon.eq.true")
         .order("sort_order");
       if (error) throw error;
       // 只顯示 is_active 或 coming_soon 的商品

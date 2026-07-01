@@ -157,17 +157,10 @@ export const useAuth = () => {
     return new Promise((resolve, reject) => {
       const attributes = [
         new CognitoUserAttribute({ Name: "email", Value: email }),
+        new CognitoUserAttribute({ Name: "name", Value: name || email }),
       ];
-
-      userPool.signUp(email, password, attributes, [], async (err, result) => {
+      userPool.signUp(email, password, attributes, [], (err) => {
         if (err) return reject(err);
-        const sub = result!.userSub;
-        await supabase.from("profiles").insert({
-          id: sub,
-          email,
-          display_name: name || null,
-          phone: phone || null,
-        });
         resolve();
       });
     });
@@ -188,7 +181,13 @@ export const useAuth = () => {
       const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
       cognitoUser.forgotPassword({
         onSuccess: () => resolve(),
-        onFailure: (err) => reject(err),
+        onFailure: (err) => {
+          if (err.code === "InvalidParameterException" || err.code === "NotAuthorizedException") {
+            reject(new Error("此帳號尚未完成驗證，請先完成註冊驗證流程"));
+          } else {
+            reject(err);
+          }
+        },
       });
     });
   };

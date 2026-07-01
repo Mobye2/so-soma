@@ -52,8 +52,8 @@ const Auth = () => {
         toast({ title: "驗證成功！", description: "請登入您的帳號。" });
         setNeedConfirm(false);
         setIsLogin(true);
-        setForm({ ...form, code: "" });
-        navigate(redirectTo);
+        setForm({ ...form, code: "", password: "" });
+        navigate("/auth");
       } else if (isLogin) {
         await signIn(form.email, form.password);
         toast({ title: "登入成功！" });
@@ -94,29 +94,67 @@ const Auth = () => {
               <input type="email" placeholder="Email *" required value={form.email} onChange={set("email")} className={inputClass} />
             ) : forgotStep === "code" ? (
               <>
-                <input placeholder="驗證碼 *" required value={form.code} onChange={set("code")} className={inputClass} />
-                <input type="password" placeholder="新密碼 *" required minLength={8} value={form.newPassword} onChange={set("newPassword")} className={inputClass} />
-                <input type="password" placeholder="確認新密碼 *" required minLength={8} value={form.newPasswordConfirm} onChange={set("newPasswordConfirm")} className={inputClass} />
+                <div>
+                  <label className="block text-sm text-foreground mb-1">驗證碼</label>
+                  <input autoComplete="one-time-code" placeholder="請輸入信箱收到的驗證碼" required value={form.code} onChange={set("code")} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-sm text-foreground mb-1">新密碼</label>
+                  <input type="password" autoComplete="new-password" placeholder="請輸入新密碼" required minLength={8} value={form.newPassword} onChange={set("newPassword")} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-sm text-foreground mb-1">確認新密碼</label>
+                  <input type="password" autoComplete="new-password" placeholder="再輸入一次新密碼" required minLength={8} value={form.newPasswordConfirm} onChange={set("newPasswordConfirm")} className={inputClass} />
+                </div>
+                <p className="text-xs text-muted-foreground">密碼至少 8 個字元，需包含大寫、小寫英文字母及數字</p>
               </>
             ) : needsNewPassword ? (
               <>
-                <input type="password" placeholder="新密碼 *" required minLength={8} value={form.newPassword} onChange={set("newPassword")} className={inputClass} />
-                <input type="password" placeholder="確認新密碼 *" required minLength={8} value={form.newPasswordConfirm} onChange={set("newPasswordConfirm")} className={inputClass} />
+                <div>
+                  <label className="block text-sm text-foreground mb-1">新密碼</label>
+                  <input type="password" autoComplete="new-password" placeholder="請輸入新密碼" required minLength={8} value={form.newPassword} onChange={set("newPassword")} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-sm text-foreground mb-1">確認新密碼</label>
+                  <input type="password" autoComplete="new-password" placeholder="再輸入一次新密碼" required minLength={8} value={form.newPasswordConfirm} onChange={set("newPasswordConfirm")} className={inputClass} />
+                </div>
+                <p className="text-xs text-muted-foreground">密碼至少 8 個字元，需包含大寫、小寫英文字母及數字</p>
               </>
             ) : needConfirm ? (
-              <input placeholder="驗證碼 *" required value={form.code} onChange={set("code")} className={inputClass} />
+              <div>
+                <label className="block text-sm text-foreground mb-1">驗證碼</label>
+                <input autoComplete="one-time-code" placeholder="請輸入信箱收到的驗證碼" required value={form.code} onChange={set("code")} className={inputClass} />
+              </div>
             ) : (
               <>
                 {!isLogin && (
                   <>
-                    <input placeholder="姓名 *" required value={form.name} onChange={set("name")} className={inputClass} />
-                    <input placeholder="電話" value={form.phone} onChange={set("phone")} className={inputClass} />
+                    <div>
+                      <label className="block text-sm text-foreground mb-1">姓名</label>
+                      <input autoComplete="name" placeholder="你的姓名" required value={form.name} onChange={set("name")} className={inputClass} />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-foreground mb-1">電話（選填）</label>
+                      <input autoComplete="tel" placeholder="你的電話" value={form.phone} onChange={set("phone")} className={inputClass} />
+                    </div>
                   </>
                 )}
-                <input type="email" placeholder="Email *" required value={form.email} onChange={set("email")} className={inputClass} />
-                <input type="password" placeholder="密碼 *" required minLength={6} value={form.password} onChange={set("password")} className={inputClass} />
+                <div>
+                  <label className="block text-sm text-foreground mb-1">Email</label>
+                  <input type="email" autoComplete="email" placeholder="your@email.com" required value={form.email} onChange={set("email")} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-sm text-foreground mb-1">密碼</label>
+                  <input type="password" autoComplete={isLogin ? "current-password" : "new-password"} placeholder="請輸入密碼" required minLength={8} value={form.password} onChange={set("password")} className={inputClass} />
+                </div>
                 {!isLogin && (
-                  <input type="password" placeholder="確認密碼 *" required minLength={6} value={form.confirmPassword} onChange={set("confirmPassword")} className={inputClass} />
+                  <>
+                    <div>
+                      <label className="block text-sm text-foreground mb-1">確認密碼</label>
+                      <input type="password" autoComplete="new-password" placeholder="再輸入一次密碼" required minLength={8} value={form.confirmPassword} onChange={set("confirmPassword")} className={inputClass} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">密碼至少 8 個字元，需包含大寫、小寫英文字母及數字</p>
+                  </>
                 )}
               </>
             )}

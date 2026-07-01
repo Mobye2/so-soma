@@ -11,6 +11,6 @@ export async function apiPost<T = any>(path: string, body: unknown, token?: stri
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "API request failed");
+  if (!res.ok) throw new Error(typeof data.error === "object" ? JSON.stringify(data.error) : (data.error || "API request failed"));
   return data;
 }

@@ -266,12 +266,17 @@ const ProductsTab = () => {
     try {
       const token = await getIdToken();
       if (p.course_id) {
+        await apiPost("/admin-db", { method: "DELETE", table: "user_course_access", filters: { course_id: `eq.${p.course_id}` } }, token || undefined);
+        await apiPost("/admin-db", { method: "DELETE", table: "course_enrollments", filters: { course_id: `eq.${p.course_id}` } }, token || undefined);
+        await apiPost("/admin-db", { method: "DELETE", table: "course_chapters", filters: { course_id: `eq.${p.course_id}` } }, token || undefined);
         await apiPost("/admin-db", { method: "DELETE", table: "courses", filters: { id: `eq.${p.course_id}` } }, token || undefined);
       }
+      await apiPost("/admin-db", { method: "DELETE", table: "order_items", filters: { product_id: `eq.${p.id}` } }, token || undefined);
       await apiPost("/admin-db", { method: "DELETE", table: "products", filters: { id: `eq.${p.id}` } }, token || undefined);
       toast({ title: "已刪除" });
       load();
     } catch (error: any) {
+      console.error("remove error:", error);
       toast({ title: "刪除失敗", description: error.message, variant: "destructive" });
     }
   };
